@@ -48,3 +48,14 @@ export function useReviewPanels(program?: string) {
     enabled: !!program,
   });
 }
+
+export function useUpsertReviewPanel() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: { program: string; memberIds: string[] }) => {
+      const res = await api.post('/panels/review', data);
+      return res.data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['review-panels'] }),
+  });
+}

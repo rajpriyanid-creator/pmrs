@@ -78,7 +78,16 @@ export const deleteStudent = asyncHandler(async (req: Request, res: Response) =>
 
 /** Bulk destructive operation - danger zone (Section 6.18). */
 export const bulkDeleteStudents = asyncHandler(async (req: Request, res: Response) => {
-  const result = await Student.deleteMany({});
+  const filter: Record<string, unknown> = {};
+  if (req.query.program) filter.program = req.query.program;
+  const result = await Student.deleteMany(filter);
   await recordAudit(req, "student.bulkDelete", "Student", undefined, { deletedCount: result.deletedCount });
   return ok(res, { deletedCount: result.deletedCount });
+});
+
+export const downloadStudentTemplate = asyncHandler(async (_req: Request, res: Response) => {
+  const csvContent = 'Roll No,Name,Email,Programme\n2026UG001,John Doe,john@example.com,UG\n2026PG001,Jane Smith,jane@example.com,MECSE\n';
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', 'attachment; filename="student-template.csv"');
+  return res.send(csvContent);
 });

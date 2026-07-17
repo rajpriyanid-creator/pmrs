@@ -136,6 +136,23 @@ export const exportFacultyList = asyncHandler(async (_req: Request, res: Respons
   res.send(buffer);
 });
 
+export const exportFacultyExcel = exportFacultyList;
+
+export const deleteFaculty = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const faculty = await Faculty.findByIdAndDelete(id);
+  if (!faculty) throw ApiError.notFound('Faculty member not found');
+  await recordAudit(req.auth!, 'delete', 'Faculty', id, { name: faculty.name });
+  res.json({ success: true, message: 'Faculty member deleted' });
+});
+
+export const bulkDeleteFaculty = asyncHandler(async (req: Request, res: Response) => {
+  // Delete all non-admin faculty
+  const result = await Faculty.deleteMany({ isAdmin: false });
+  await recordAudit(req.auth!, 'delete', 'Faculty', 'bulk', { deletedCount: result.deletedCount });
+  res.json({ success: true, deletedCount: result.deletedCount });
+});
+
 export function assertStrongPasswordIfProvided(password?: string) {
   if (password && !isPasswordStrongEnough(password)) {
     throw ApiError.badRequest('Password must be at least 8 characters and include a letter and a number');

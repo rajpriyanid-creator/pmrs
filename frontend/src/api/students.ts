@@ -32,6 +32,28 @@ export function useCreateStudent() {
   });
 }
 
+export function useDeleteStudent() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await api.delete(`/students/${id}`);
+      return res.data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['students'] }),
+  });
+}
+
+export function useDeleteAllStudents() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (program?: string) => {
+      const res = await api.delete('/students', { params: { program } });
+      return res.data as { success: boolean; deletedCount: number };
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['students'] }),
+  });
+}
+
 export function useImportStudents() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -44,6 +66,10 @@ export function useImportStudents() {
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['students'] }),
   });
+}
+
+export function downloadStudentTemplate() {
+  return api.get('/students/template', { responseType: 'blob' });
 }
 
 export interface GuideAvailability {

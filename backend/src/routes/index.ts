@@ -17,11 +17,14 @@ import reportsRoutes from './reports';
 import documentsRoutes from './documents';
 import signaturesRoutes from './signatures';
 
+import designationLimitRoutes from './designationLimits';
+
 const router = Router();
 
 router.use('/auth', authRoutes);
 router.use('/programs', programRoutes);
 router.use('/faculty', facultyRoutes);
+router.use('/designation-limits', designationLimitRoutes);
 router.use('/students', studentRoutes);
 router.use('/teams', teamRoutes);
 router.use('/guide-requests', guideRequestRoutes);

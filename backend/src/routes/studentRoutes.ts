@@ -10,6 +10,7 @@ const router = Router();
 router.use(requireAuth(), requireRole("admin", "assistant", "coordinator"));
 
 router.get("/", ctrl.listStudents);
+router.get("/template", ctrl.downloadStudentTemplate);
 router.post("/", requireRole("admin"), validate(createStudentSchema), ctrl.createStudent);
 router.post("/import", requireRole("admin"), uploadSingle("excel"), ctrl.importStudentsCsv);
 router.delete("/:id", requireRole("admin"), ctrl.deleteStudent);

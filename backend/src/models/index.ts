@@ -10,4 +10,5 @@ export * from './Attendance';
 export * from './Marks';
 export * from './Notification';
 export * from './AuditLog';
+export * from './DesignationLimit';
 export * from './RefreshToken';

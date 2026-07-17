@@ -9,6 +9,8 @@ import {
   importFacultyCsv,
   listFaculty,
   updateFaculty,
+  deleteFaculty,
+  bulkDeleteFaculty,
 } from '../controllers/facultyController';
 import { excelUpload } from '../middleware/upload';
 import { writeLimiter } from '../middleware/rateLimiters';
@@ -23,5 +25,7 @@ router.get('/export', requireRole('admin', 'assistant'), exportFacultyList);
 router.post('/', requireRole('admin'), writeLimiter, validate(createFacultySchema), createFaculty);
 router.post('/import', requireRole('admin'), writeLimiter, excelUpload, importFacultyCsv);
 router.patch('/:id', requireRole('admin'), writeLimiter, validate(updateFacultySchema), updateFaculty);
+router.delete('/:id', requireRole('admin'), writeLimiter, deleteFaculty);
+router.delete('/', requireRole('admin'), writeLimiter, bulkDeleteFaculty);
 
 export default router;

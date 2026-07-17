@@ -10,6 +10,8 @@ const ChangePasswordPage = lazy(() => import('@/pages/auth/ChangePasswordPage').
 const RegisterPanelPage = lazy(() => import('@/pages/auth/RegisterPanelPage').then((m) => ({ default: m.RegisterPanelPage })));
 
 const AdminOverviewPage = lazy(() => import('@/pages/admin/AdminOverviewPage').then((m) => ({ default: m.AdminOverviewPage })));
+const GlobalManagementPage = lazy(() => import('@/pages/admin/GlobalManagementPage').then((m) => ({ default: m.GlobalManagementPage })));
+const ProgramDashboardPage = lazy(() => import('@/pages/admin/ProgramDashboardPage').then((m) => ({ default: m.ProgramDashboardPage })));
 const AdminFacultyPage = lazy(() => import('@/pages/admin/AdminFacultyPage').then((m) => ({ default: m.AdminFacultyPage })));
 const AdminStudentsPage = lazy(() => import('@/pages/admin/AdminStudentsPage').then((m) => ({ default: m.AdminStudentsPage })));
 const AdminAllocationsPage = lazy(() => import('@/pages/admin/AdminAllocationsPage').then((m) => ({ default: m.AdminAllocationsPage })));
@@ -100,6 +102,8 @@ export function AppRouter() {
 
         {/* Admin */}
         <Route path="/admin" element={<ProtectedRoute allow={['admin']}><AdminOverviewPage /></ProtectedRoute>} />
+        <Route path="/admin/global-management" element={<ProtectedRoute allow={['admin']}><GlobalManagementPage /></ProtectedRoute>} />
+        <Route path="/admin-dashboard/programme/:programId" element={<ProtectedRoute allow={['admin']}><ProgramDashboardPage /></ProtectedRoute>} />
         <Route path="/admin/faculty" element={<ProtectedRoute allow={['admin']}><AdminFacultyPage /></ProtectedRoute>} />
         <Route path="/admin/students" element={<ProtectedRoute allow={['admin']}><AdminStudentsPage /></ProtectedRoute>} />
         <Route path="/admin/allocations" element={<ProtectedRoute allow={['admin']}><AdminAllocationsPage /></ProtectedRoute>} />
