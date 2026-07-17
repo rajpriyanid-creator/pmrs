@@ -7,7 +7,6 @@ services:
     name: prms-backend
     runtime: node
     plan: free
-    region: singapore
     buildCommand: cd backend && npm install && npm run build
     startCommand: cd backend && npm start
     envVars:
@@ -16,7 +15,7 @@ services:
       - key: PORT
         value: 10000
       - key: MONGO_URI
-        sync: false # Provide your MongoDB Atlas Connection String in Render Dashboard
+        sync: false # Set your MongoDB Atlas connection string in Render Dashboard
       - key: JWT_ACCESS_SECRET
         generateValue: true
       - key: JWT_REFRESH_SECRET
@@ -24,24 +23,18 @@ services:
       - key: ACCESS_TOKEN_TTL
         value: 15m
       - key: REFRESH_TOKEN_TTL_DAYS
-        value: 7
+        value: "7"
       - key: CORS_ORIGIN
         value: https://prms-frontend.onrender.com
       - key: COOKIE_SECURE
-        value: true
-      - key: ADMIN_SEED_USERNAME
-        value: admin
-      - key: ADMIN_SEED_PASSWORD
-        value: ChangeMe123!
+        value: "true"
 
   # 2. Frontend React / Vite Static Site
   - type: web
     name: prms-frontend
     runtime: static
-    plan: free
-    region: singapore
     buildCommand: cd frontend && npm install && npm run build
-    staticPublishPath: ./frontend/dist
+    publishPath: ./frontend/dist
     routes:
       - type: rewrite
         source: /*
