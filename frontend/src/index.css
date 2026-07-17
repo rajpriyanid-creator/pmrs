@@ -1,0 +1,85 @@
+@import "tailwindcss";
+
+/*
+  PRMS Design System — "The Review Rail"
+  Palette, typography and motion tokens straight from Section 9 of the spec.
+  Deliberately not cream+terracotta / not near-black+neon / not broadsheet.
+*/
+@theme {
+  --color-paper: #F6F7F4;
+  --color-ink: #1B2430;
+  --color-seal: #B8863B;
+  --color-verdant: #1F5C57;
+  --color-flag: #A63D33;
+
+  /* Tonal steps derived from the 5 named colors, used for surfaces/borders/hover states */
+  --color-paper-dim: #ECEEE8;
+  --color-ink-soft: #3A4454;
+  --color-ink-faint: #6B7484;
+  --color-seal-soft: #E4CFA6;
+  --color-seal-dim: #F3E9D6;
+  --color-verdant-soft: #DCEAE7;
+  --color-flag-soft: #F3DEDB;
+
+  --font-display: "Fraunces", "Source Serif 4", Georgia, serif;
+  --font-body: "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  --shadow-ledger: 0 1px 0 0 rgb(27 36 48 / 0.08);
+  --shadow-card: 0 1px 3px rgb(27 36 48 / 0.08), 0 1px 2px rgb(27 36 48 / 0.06);
+  --shadow-raised: 0 4px 16px rgb(27 36 48 / 0.10);
+}
+
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+  html {
+    color-scheme: light;
+  }
+  body {
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3, .font-display {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+  }
+  .font-data {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Visible focus rings using `seal` at 2px offset — accessibility floor (Section 9) */
+  :focus-visible {
+    outline: 2px solid var(--color-seal);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  ::selection {
+    background-color: var(--color-seal-soft);
+    color: var(--color-ink);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer utilities {
+  .ledger-row {
+    border-bottom: 1px solid rgb(27 36 48 / 0.08);
+  }
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-ink-faint) transparent;
+  }
+}
