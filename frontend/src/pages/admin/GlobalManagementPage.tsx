@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, GraduationCap, UserCheck, Trash2, Download, Upload, Plus, Edit, RefreshCw, Eye, EyeOff } from 'lucide-react';
+import { Users, GraduationCap, UserCheck, Trash2, Download, Upload, Plus, Edit, RefreshCw, Eye, EyeOff, ArrowLeft, LogOut, Menu, X } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import {
   useFacultyList,
@@ -33,72 +33,110 @@ import { apiErrorMessage } from '@/api/client';
 
 export function GlobalManagementPage() {
   const [activeTab, setActiveTab] = useState<'faculty' | 'pg'>('faculty');
+  const [mobileOpen, setMobileOpen] = useState(false);
   const logout = useAuthStore((s) => s.logout);
   const navigate = useNavigate();
 
-  return (
-    <div className="min-h-screen bg-[var(--color-paper)] text-[var(--color-ink)]">
-      {/* Dark Ink Header with Brass Logo Mark */}
-      <header className="bg-[var(--color-ink)] text-[var(--color-paper)] shadow-[var(--shadow-ledger)]">
-        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="h-7 w-7 rounded-lg bg-[var(--color-ink-soft)] flex items-center justify-center shrink-0 border border-[var(--color-seal)]">
-              <div className="h-3 w-3 rounded-full border-[1.5px] border-[var(--color-seal)] bg-[var(--color-seal)]" />
-            </div>
-            <span className="bg-[var(--color-seal-dim)] text-[var(--color-seal)] text-xs font-data font-bold px-2.5 py-1 rounded border border-[var(--color-seal)]/30">
+  const sidebarContent = (
+    <div className="flex flex-col h-full bg-[var(--color-ink)] text-[var(--color-paper)] border-r border-[var(--color-ink-soft)]">
+      {/* Branding Header */}
+      <div className="p-6 border-b border-[var(--color-ink-soft)]/60">
+        <div className="flex items-center gap-3">
+          <div className="h-8 w-8 rounded-lg bg-[var(--color-ink-soft)] flex items-center justify-center shrink-0 border border-[var(--color-seal)]">
+            <div className="h-3.5 w-3.5 rounded-full border-[1.5px] border-[var(--color-seal)] bg-[var(--color-seal)]" />
+          </div>
+          <div>
+            <span className="font-display font-bold tracking-tight text-base text-[var(--color-paper)] block">Project Review</span>
+            <span className="bg-[var(--color-seal-dim)] text-[var(--color-seal)] text-[10px] font-data font-bold px-2 py-0.5 rounded border border-[var(--color-seal)]/30 inline-block mt-1">
               Admin (Global)
             </span>
-            <span className="font-display font-semibold tracking-tight text-base text-[var(--color-paper)]">Project Review</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => navigate('/admin')}
-              className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-[var(--color-seal)] hover:bg-[var(--color-seal)]/90 text-[var(--color-paper)] transition-colors"
-            >
-              Control Panel
-            </button>
-            <button
-              onClick={() => {
-                logout();
-                navigate('/login', { replace: true });
-              }}
-              className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-white/10 hover:bg-white/20 text-[var(--color-paper)] transition-colors"
-            >
-              Logout
-            </button>
           </div>
         </div>
-      </header>
+      </div>
+
+      {/* Nav Menu */}
+      <nav className="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto scrollbar-thin">
+        <button
+          onClick={() => {
+            setActiveTab('faculty');
+            setMobileOpen(false);
+          }}
+          className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-semibold transition-all text-left ${
+            activeTab === 'faculty'
+              ? 'bg-[var(--color-seal)] text-[var(--color-paper)] shadow-md font-bold'
+              : 'text-[var(--color-paper)]/75 hover:bg-white/10 hover:text-[var(--color-paper)]'
+          }`}
+        >
+          <Users size={16} className={activeTab === 'faculty' ? 'text-[var(--color-paper)]' : 'text-[var(--color-seal-soft)]'} />
+          <span>Faculty & Limits</span>
+        </button>
+
+        <button
+          onClick={() => {
+            setActiveTab('pg');
+            setMobileOpen(false);
+          }}
+          className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-semibold transition-all text-left ${
+            activeTab === 'pg'
+              ? 'bg-[var(--color-seal)] text-[var(--color-paper)] shadow-md font-bold'
+              : 'text-[var(--color-paper)]/75 hover:bg-white/10 hover:text-[var(--color-paper)]'
+          }`}
+        >
+          <GraduationCap size={16} className={activeTab === 'pg' ? 'text-[var(--color-paper)]' : 'text-[var(--color-seal-soft)]'} />
+          <span>PG Programmes</span>
+        </button>
+      </nav>
+
+      {/* Bottom Footer Actions */}
+      <div className="p-4 border-t border-[var(--color-ink-soft)]/60 space-y-2">
+        <button
+          onClick={() => navigate('/admin')}
+          className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-semibold bg-white/10 hover:bg-white/20 text-[var(--color-paper)] transition-colors"
+        >
+          <ArrowLeft size={14} /> Control Panel
+        </button>
+        <button
+          onClick={() => {
+            logout();
+            navigate('/login', { replace: true });
+          }}
+          className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-semibold bg-[var(--color-flag)]/80 hover:bg-[var(--color-flag)] text-[var(--color-paper)] transition-colors"
+        >
+          <LogOut size={14} /> Logout
+        </button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen flex bg-[var(--color-paper)] text-[var(--color-ink)]">
+      {/* Desktop Left Side Panel */}
+      <aside className="hidden lg:block w-72 shrink-0 h-screen sticky top-0 shadow-[var(--shadow-raised)] z-20">
+        {sidebarContent}
+      </aside>
+
+      {/* Mobile Top Header & Overlay Drawer */}
+      <div className="lg:hidden fixed top-0 left-0 right-0 h-14 bg-[var(--color-ink)] text-[var(--color-paper)] px-4 flex items-center justify-between z-30 border-b border-[var(--color-seal)]/30">
+        <div className="flex items-center gap-2.5">
+          <button onClick={() => setMobileOpen(!mobileOpen)} className="p-1.5 rounded-lg bg-white/10 text-[var(--color-paper)]">
+            {mobileOpen ? <X size={18} /> : <Menu size={18} />}
+          </button>
+          <span className="font-display font-semibold text-sm">Global Management</span>
+        </div>
+      </div>
+
+      {mobileOpen && (
+        <div className="lg:hidden fixed inset-0 z-40 flex">
+          <div className="fixed inset-0 bg-[var(--color-ink)]/50 backdrop-blur-xs" onClick={() => setMobileOpen(false)} />
+          <div className="relative w-72 h-full z-50">{sidebarContent}</div>
+        </div>
+      )}
 
       {/* Main Content Area */}
-      <main className="max-w-6xl mx-auto px-6 py-8 space-y-6">
+      <main className="flex-1 min-w-0 p-6 lg:p-10 pt-20 lg:pt-10 overflow-y-auto space-y-6">
         <div>
           <h1 className="font-display text-2xl font-bold text-[var(--color-ink)]">Global Management</h1>
           <p className="text-xs font-medium text-[var(--color-ink-faint)] mt-1">Manage shared resources across all programmes.</p>
-        </div>
-
-        {/* Tab Switcher */}
-        <div className="flex border-b border-[var(--color-ink)]/10">
-          <button
-            onClick={() => setActiveTab('faculty')}
-            className={`flex items-center gap-2 px-5 py-3 text-xs font-semibold transition-all border-b-2 ${
-              activeTab === 'faculty'
-                ? 'border-[var(--color-seal)] text-[var(--color-seal)] font-bold bg-[var(--color-seal-dim)]/40'
-                : 'border-transparent text-[var(--color-ink-faint)] hover:text-[var(--color-ink)]'
-            }`}
-          >
-            <Users size={16} /> Faculty & Designation Limits
-          </button>
-          <button
-            onClick={() => setActiveTab('pg')}
-            className={`flex items-center gap-2 px-5 py-3 text-xs font-semibold transition-all border-b-2 ${
-              activeTab === 'pg'
-                ? 'border-[var(--color-seal)] text-[var(--color-seal)] font-bold bg-[var(--color-seal-dim)]/40'
-                : 'border-transparent text-[var(--color-ink-faint)] hover:text-[var(--color-ink)]'
-            }`}
-          >
-            <GraduationCap size={16} /> PG Programmes
-          </button>
         </div>
 
         {activeTab === 'faculty' && <FacultyAndLimitsTab />}

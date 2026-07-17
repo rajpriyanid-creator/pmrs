@@ -1,5 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import {
+  Users,
+  Sliders,
+  LayoutGrid,
+  GitBranch,
+  ClipboardCheck,
+  UserCheck,
+  Calendar,
+  ArrowLeft,
+  LogOut,
+  Menu,
+  X,
+} from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { usePrograms } from '@/api/programs';
 import { useFacultyList } from '@/api/faculty';
@@ -20,6 +33,7 @@ export function ProgramDashboardPage() {
   const { programId } = useParams<{ programId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = searchParams.get('tab') || 'student-registration';
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   const { data: programs } = usePrograms();
   const logout = useAuthStore((s) => s.logout);
@@ -35,72 +49,105 @@ export function ProgramDashboardPage() {
 
   function setTab(tab: string) {
     setSearchParams({ tab });
+    setMobileOpen(false);
   }
 
-  return (
-    <div className="min-h-screen bg-[var(--color-paper)] text-[var(--color-ink)]">
-      {/* Dark Ink Header with Brass Logo Mark */}
-      <header className="bg-[var(--color-ink)] text-[var(--color-paper)] shadow-[var(--shadow-ledger)]">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between gap-4 overflow-x-auto">
-          {/* Left Identity */}
-          <div className="flex items-center gap-3 shrink-0">
-            <div className="h-7 w-7 rounded-lg bg-[var(--color-ink-soft)] flex items-center justify-center shrink-0 border border-[var(--color-seal)]">
-              <div className="h-3 w-3 rounded-full border-[1.5px] border-[var(--color-seal)] bg-[var(--color-seal)]" />
-            </div>
-            <span className="bg-[var(--color-seal-dim)] text-[var(--color-seal)] text-xs font-data font-bold px-2.5 py-1 rounded border border-[var(--color-seal)]/30">
+  const navItems = [
+    { id: 'student-registration', label: 'Student Registration', icon: Users },
+    { id: 'settings', label: 'Settings', icon: Sliders },
+    { id: 'review-panels', label: 'Review Panels', icon: LayoutGrid },
+    { id: 'team-panel-allocations', label: 'Team Panel Allocations', icon: GitBranch },
+    { id: 'review-attendance', label: 'Review Attendance', icon: ClipboardCheck },
+    { id: 'student-attendance', label: 'Student Attendance', icon: UserCheck },
+    { id: 'schedules', label: 'Schedules', icon: Calendar },
+  ];
+
+  const sidebarContent = (
+    <div className="flex flex-col h-full bg-[var(--color-ink)] text-[var(--color-paper)] border-r border-[var(--color-ink-soft)]">
+      {/* Branding Header */}
+      <div className="p-6 border-b border-[var(--color-ink-soft)]/60">
+        <div className="flex items-center gap-3">
+          <div className="h-8 w-8 rounded-lg bg-[var(--color-ink-soft)] flex items-center justify-center shrink-0 border border-[var(--color-seal)]">
+            <div className="h-3.5 w-3.5 rounded-full border-[1.5px] border-[var(--color-seal)] bg-[var(--color-seal)]" />
+          </div>
+          <div>
+            <span className="font-display font-bold tracking-tight text-base text-[var(--color-paper)] block">Project Review</span>
+            <span className="bg-[var(--color-seal-dim)] text-[var(--color-seal)] text-[10px] font-data font-bold px-2 py-0.5 rounded border border-[var(--color-seal)]/30 inline-block mt-1">
               Admin ({program.name})
             </span>
-            <span className="font-display font-semibold tracking-tight text-base text-[var(--color-paper)]">Project Review</span>
-          </div>
-
-          {/* Navigation Tabs */}
-          <nav className="flex items-center gap-1 overflow-x-auto text-xs font-medium py-1">
-            {[
-              { id: 'student-registration', label: 'Student Registration' },
-              { id: 'settings', label: 'Settings' },
-              { id: 'review-panels', label: 'Review Panels' },
-              { id: 'team-panel-allocations', label: 'Team Panel Allocations' },
-              { id: 'review-attendance', label: 'Review Attendance' },
-              { id: 'student-attendance', label: 'Student Attendance' },
-              { id: 'schedules', label: 'Schedules' },
-            ].map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setTab(t.id)}
-                className={`px-3 py-1.5 rounded-md transition-colors whitespace-nowrap ${
-                  activeTab === t.id
-                    ? 'bg-[var(--color-seal)] text-[var(--color-paper)] font-semibold shadow-sm'
-                    : 'text-[var(--color-paper)]/80 hover:bg-white/10'
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
-          </nav>
-
-          {/* Right Action buttons */}
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={() => navigate('/admin')}
-              className="px-3 py-1.5 rounded-md text-xs font-semibold bg-[var(--color-seal)] hover:bg-[var(--color-seal)]/90 text-[var(--color-paper)] transition-colors"
-            >
-              Control Panel
-            </button>
-            <button
-              onClick={() => {
-                logout();
-                navigate('/login', { replace: true });
-              }}
-              className="px-3 py-1.5 rounded-md text-xs font-semibold bg-white/10 hover:bg-white/20 text-[var(--color-paper)] transition-colors"
-            >
-              Logout
-            </button>
           </div>
         </div>
-      </header>
+      </div>
+
+      {/* Nav Menu */}
+      <nav className="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto scrollbar-thin">
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = activeTab === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => setTab(item.id)}
+              className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-semibold transition-all text-left ${
+                isActive
+                  ? 'bg-[var(--color-seal)] text-[var(--color-paper)] shadow-md font-bold'
+                  : 'text-[var(--color-paper)]/75 hover:bg-white/10 hover:text-[var(--color-paper)]'
+              }`}
+            >
+              <Icon size={16} className={isActive ? 'text-[var(--color-paper)]' : 'text-[var(--color-seal-soft)]'} />
+              <span>{item.label}</span>
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* Bottom Footer Actions */}
+      <div className="p-4 border-t border-[var(--color-ink-soft)]/60 space-y-2">
+        <button
+          onClick={() => navigate('/admin')}
+          className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-semibold bg-white/10 hover:bg-white/20 text-[var(--color-paper)] transition-colors"
+        >
+          <ArrowLeft size={14} /> Control Panel
+        </button>
+        <button
+          onClick={() => {
+            logout();
+            navigate('/login', { replace: true });
+          }}
+          className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-semibold bg-[var(--color-flag)]/80 hover:bg-[var(--color-flag)] text-[var(--color-paper)] transition-colors"
+        >
+          <LogOut size={14} /> Logout
+        </button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen flex bg-[var(--color-paper)] text-[var(--color-ink)]">
+      {/* Desktop Left Side Panel */}
+      <aside className="hidden lg:block w-72 shrink-0 h-screen sticky top-0 shadow-[var(--shadow-raised)] z-20">
+        {sidebarContent}
+      </aside>
+
+      {/* Mobile Top Header & Overlay Drawer */}
+      <div className="lg:hidden fixed top-0 left-0 right-0 h-14 bg-[var(--color-ink)] text-[var(--color-paper)] px-4 flex items-center justify-between z-30 border-b border-[var(--color-seal)]/30">
+        <div className="flex items-center gap-2.5">
+          <button onClick={() => setMobileOpen(!mobileOpen)} className="p-1.5 rounded-lg bg-white/10 text-[var(--color-paper)]">
+            {mobileOpen ? <X size={18} /> : <Menu size={18} />}
+          </button>
+          <span className="font-display font-semibold text-sm">Admin ({program.name})</span>
+        </div>
+      </div>
+
+      {mobileOpen && (
+        <div className="lg:hidden fixed inset-0 z-40 flex">
+          <div className="fixed inset-0 bg-[var(--color-ink)]/50 backdrop-blur-xs" onClick={() => setMobileOpen(false)} />
+          <div className="relative w-72 h-full z-50">{sidebarContent}</div>
+        </div>
+      )}
 
       {/* Main Content Area */}
-      <main className="max-w-6xl mx-auto px-6 py-8">
+      <main className="flex-1 min-w-0 p-6 lg:p-10 pt-20 lg:pt-10 overflow-y-auto">
         {activeTab === 'student-registration' && <StudentRegistrationTab programName={program.name} />}
         {activeTab === 'settings' && <AdminSettingsTab programName={program.name} />}
         {activeTab === 'review-panels' && <ReviewPanelsTab programName={program.name} />}
