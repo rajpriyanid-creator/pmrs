@@ -9,6 +9,7 @@ router.use(requireRole('admin', 'coordinator'));
 
 router.get('/templates', listTemplates);
 router.get('/preview/:type', previewLetter);
+router.get('/generate/:type', generateLetter);
 router.post('/generate/:type', writeLimiter, generateLetter);
 
 export default router;

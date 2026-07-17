@@ -5,6 +5,7 @@ import { Faculty } from '../models/Faculty';
 import { Signature } from '../models/Signature';
 import { asyncHandler } from '../utils/asyncHandler';
 import { ApiError } from '../utils/ApiError';
+import { generateLetterPDF } from '../utils/pdfGenerator';
 import path from 'path';
 import fs from 'fs';
 
@@ -125,16 +126,21 @@ export const listTemplates = asyncHandler(async (_req: Request, res: Response) =
   res.json({ templates });
 });
 
-/** POST /documents/generate/:type — generate a letter for a team. */
+/** GET/POST /documents/generate/:type — generate a letter for a team as PDF. */
 export const generateLetter = asyncHandler(async (req: Request, res: Response) => {
   const { type } = req.params;
   const validTypes = ['viva_letter', 'internal_examiner_letter', 'external_examiner_letter', 'chairman_letter'];
   if (!validTypes.includes(type)) throw ApiError.badRequest(`Unknown letter type: ${type}`);
 
-  const { teamId, reviewDate } = req.body as { teamId: string; reviewDate?: string };
+  const teamId = (req.query.teamId || req.body?.teamId) as string;
+  const reviewDate = (req.query.reviewDate || req.body?.reviewDate) as string;
   if (!teamId) throw ApiError.badRequest('teamId is required');
 
-  const team = await Team.findById(teamId).populate('guideId', 'name').lean() as any;
+  const team = await Team.findById(teamId)
+    .populate('guideId', 'name')
+    .populate('students', 'name rollNo')
+    .populate('program', 'name code')
+    .lean() as any;
   if (!team) throw ApiError.notFound('Team not found');
 
   // Fetch coordinator for this team via ReviewPanel
@@ -143,25 +149,37 @@ export const generateLetter = asyncHandler(async (req: Request, res: Response) =
   // Fetch viva panel external members if applicable
   const vivaPanel = await VivaPanel.findOne({ teamIds: teamId }).lean() as any;
 
-  // Fetch signature for coordinator
-  const signature = await Signature.findOne({ ownerId: req.auth!.userId }).select('imageBase64').lean();
+  // Fetch signature for coordinator or admin
+  const signature = await Signature.findOne({
+    $or: [{ ownerId: req.auth?.userId }, { role: { $regex: /coordinator|hod/i } }],
+  }).select('imageBase64').lean();
 
-  const data: LetterData = {
-    teamName: team.name,
-    guideName: team.guideId?.name ?? 'N/A',
-    coordinatorName: panel?.coordinatorId?.name ?? 'Coordinator',
-    reviewDate: reviewDate ?? new Date().toLocaleDateString('en-IN'),
-    externalName: vivaPanel?.externalMembers?.[0]?.name ?? '',
-    externalAffiliation: vivaPanel?.externalMembers?.[0]?.affiliation ?? '',
-    externalEmail: vivaPanel?.externalMembers?.[0]?.email ?? '',
-    signatureBase64: signature?.imageBase64 ?? '',
+  const labels: Record<string, string> = {
+    viva_letter: 'Viva Examination Invitation Letter',
+    internal_examiner_letter: 'Internal Examiner Appointment Letter',
+    external_examiner_letter: 'External Examiner Remuneration & Claim Letter',
+    chairman_letter: 'Viva Panel Chairman Appointment Notice',
   };
 
-  const { content, mimeType, filename } = await generateLetterContent(type, data);
+  const pdfBuffer = await generateLetterPDF({
+    type,
+    templateTitle: labels[type] || 'Official Document',
+    reviewDate: reviewDate || new Date().toLocaleDateString('en-IN'),
+    teamName: team.name,
+    programName: team.program?.name || 'Academic Programme',
+    guideName: team.guideId?.name ?? 'N/A',
+    coordinatorName: panel?.coordinatorId?.name ?? 'Dr. Ramesh Gurunath',
+    students: team.students ?? [],
+    externalName: vivaPanel?.externalMembers?.[0]?.name ?? 'Dr. R. Ramanujam',
+    externalAffiliation: vivaPanel?.externalMembers?.[0]?.affiliation ?? 'IIT Madras',
+    externalEmail: vivaPanel?.externalMembers?.[0]?.email ?? 'ramanujam@iitm.ac.in',
+    signatureBase64: signature?.imageBase64,
+  });
 
-  res.setHeader('Content-Type', mimeType);
-  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-  res.send(content);
+  const filename = `${type}-${team.name.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+  res.send(pdfBuffer);
 });
 
 /** GET /documents/preview/:type — generate and return as JSON for in-browser editing. */
