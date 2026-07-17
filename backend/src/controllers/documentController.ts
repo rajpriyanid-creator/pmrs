@@ -126,75 +126,82 @@ export const listTemplates = asyncHandler(async (_req: Request, res: Response) =
   res.json({ templates });
 });
 
+import { logger } from '../config/logger';
 import { Types } from 'mongoose';
 
 /** GET/POST /documents/generate/:type — generate a letter for a team as PDF. */
 export const generateLetter = asyncHandler(async (req: Request, res: Response) => {
-  const { type } = req.params;
-  const validTypes = ['viva_letter', 'internal_examiner_letter', 'external_examiner_letter', 'chairman_letter'];
-  if (!validTypes.includes(type)) throw ApiError.badRequest(`Unknown letter type: ${type}`);
+  try {
+    const { type } = req.params;
+    const validTypes = ['viva_letter', 'internal_examiner_letter', 'external_examiner_letter', 'chairman_letter'];
+    if (!validTypes.includes(type)) throw ApiError.badRequest(`Unknown letter type: ${type}`);
 
-  const teamId = (req.query.teamId || req.body?.teamId) as string;
-  const reviewDate = (req.query.reviewDate || req.body?.reviewDate) as string;
-  if (!teamId || !Types.ObjectId.isValid(teamId)) {
-    throw ApiError.badRequest('A valid teamId is required');
-  }
-
-  const team = await Team.findById(teamId)
-    .populate('guideId', 'name')
-    .populate('students', 'name rollNo')
-    .populate('program', 'name code')
-    .lean() as any;
-  if (!team) throw ApiError.notFound('Team not found');
-
-  // Fetch coordinator for this team via ReviewPanel
-  const panel = await ReviewPanel.findOne({ teamIds: new Types.ObjectId(teamId) })
-    .populate('coordinatorId', 'name')
-    .lean() as any;
-
-  // Fetch viva panel external members if applicable
-  const vivaPanel = await VivaPanel.findOne({ teamIds: new Types.ObjectId(teamId) }).lean() as any;
-
-  // Fetch signature for coordinator or admin
-  const sigOr: any[] = [{ role: { $regex: /coordinator|hod/i } }];
-  if (req.auth?.userId && Types.ObjectId.isValid(req.auth.userId)) {
-    sigOr.push({ ownerId: new Types.ObjectId(req.auth.userId) });
-  }
-  const signature = await Signature.findOne({ $or: sigOr }).select('imageBase64').lean();
-
-  const labels: Record<string, string> = {
-    viva_letter: 'Viva Examination Invitation Letter',
-    internal_examiner_letter: 'Internal Examiner Appointment Letter',
-    external_examiner_letter: 'External Examiner Remuneration & Claim Letter',
-    chairman_letter: 'Viva Panel Chairman Appointment Notice',
-  };
-
-  const formattedStudents = (team.students || []).map((s: any) => {
-    if (typeof s === 'object' && s !== null) {
-      return { name: s.name || 'Student', rollNo: s.rollNo || '' };
+    const teamId = (req.query.teamId || req.body?.teamId) as string;
+    const reviewDate = (req.query.reviewDate || req.body?.reviewDate) as string;
+    if (!teamId || !Types.ObjectId.isValid(teamId)) {
+      throw ApiError.badRequest('A valid teamId is required');
     }
-    return { name: String(s), rollNo: '' };
-  });
 
-  const pdfBuffer = await generateLetterPDF({
-    type,
-    templateTitle: labels[type] || 'Official Document',
-    reviewDate: reviewDate || new Date().toLocaleDateString('en-IN'),
-    teamName: team.name,
-    programName: team.program?.name || 'Academic Programme',
-    guideName: team.guideId?.name ?? 'N/A',
-    coordinatorName: panel?.coordinatorId?.name ?? 'Dr. Ramesh Gurunath',
-    students: formattedStudents,
-    externalName: vivaPanel?.externalMembers?.[0]?.name ?? 'Dr. R. Ramanujam',
-    externalAffiliation: vivaPanel?.externalMembers?.[0]?.affiliation ?? 'IIT Madras',
-    externalEmail: vivaPanel?.externalMembers?.[0]?.email ?? 'ramanujam@iitm.ac.in',
-    signatureBase64: signature?.imageBase64,
-  });
+    const team = await Team.findById(teamId)
+      .populate('guideId', 'name')
+      .populate('students', 'name rollNo')
+      .populate('program', 'name code')
+      .lean() as any;
+    if (!team) throw ApiError.notFound('Team not found');
 
-  const filename = `${type}-${team.name.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
-  res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
-  res.send(pdfBuffer);
+    // Fetch coordinator for this team via ReviewPanel
+    const panel = await ReviewPanel.findOne({ teamIds: new Types.ObjectId(teamId) })
+      .populate('coordinatorId', 'name')
+      .lean() as any;
+
+    // Fetch viva panel external members if applicable
+    const vivaPanel = await VivaPanel.findOne({ teamIds: new Types.ObjectId(teamId) }).lean() as any;
+
+    // Fetch signature for coordinator or admin
+    const sigOr: any[] = [{ role: { $regex: /coordinator|hod/i } }];
+    if (req.auth?.userId && Types.ObjectId.isValid(req.auth.userId)) {
+      sigOr.push({ ownerId: new Types.ObjectId(req.auth.userId) });
+    }
+    const signature = await Signature.findOne({ $or: sigOr }).select('imageBase64').lean();
+
+    const labels: Record<string, string> = {
+      viva_letter: 'Viva Examination Invitation Letter',
+      internal_examiner_letter: 'Internal Examiner Appointment Letter',
+      external_examiner_letter: 'External Examiner Remuneration & Claim Letter',
+      chairman_letter: 'Viva Panel Chairman Appointment Notice',
+    };
+
+    const formattedStudents = (team.students || []).map((s: any) => {
+      if (typeof s === 'object' && s !== null) {
+        return { name: s.name || 'Student', rollNo: s.rollNo || '' };
+      }
+      return { name: String(s), rollNo: '' };
+    });
+
+    const pdfBuffer = await generateLetterPDF({
+      type,
+      templateTitle: labels[type] || 'Official Document',
+      reviewDate: reviewDate || new Date().toLocaleDateString('en-IN'),
+      teamName: team.name,
+      programName: team.program?.name || 'Academic Programme',
+      guideName: team.guideId?.name ?? 'N/A',
+      coordinatorName: panel?.coordinatorId?.name ?? 'Dr. Ramesh Gurunath',
+      students: formattedStudents,
+      externalName: vivaPanel?.externalMembers?.[0]?.name ?? 'Dr. R. Ramanujam',
+      externalAffiliation: vivaPanel?.externalMembers?.[0]?.affiliation ?? 'IIT Madras',
+      externalEmail: vivaPanel?.externalMembers?.[0]?.email ?? 'ramanujam@iitm.ac.in',
+      signatureBase64: signature?.imageBase64,
+    });
+
+    const filename = `${type}-${team.name.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+    res.send(pdfBuffer);
+  } catch (err: any) {
+    logger.error('Failed to generate letter PDF:', err);
+    if (err instanceof ApiError) throw err;
+    throw ApiError.internal(`PDF Generation Error: ${err?.message || err}`);
+  }
 });
 
 /** GET /documents/preview/:type — generate and return as JSON for in-browser editing. */
