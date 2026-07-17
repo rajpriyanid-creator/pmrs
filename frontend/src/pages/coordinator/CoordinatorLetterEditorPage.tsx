@@ -9,6 +9,7 @@ import { apiErrorMessage, api } from '@/api/client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { FileText, Download, Eye } from 'lucide-react';
 import { useTeamList } from '@/api/teams';
+import { downloadLetterPDF } from '@/api/documents';
 
 const LETTER_TYPES = [
   { id: 'viva_letter', label: 'Viva Letter (External Examiner Invitation)' },
@@ -45,17 +46,10 @@ export function CoordinatorLetterEditorPage() {
     if (!teamId) return toast.error('Select a team first');
     setDownloading(true);
     try {
-      const res = await api.post(
-        `/documents/generate/${letterType}`,
-        { teamId, reviewDate: reviewDate ? new Date(reviewDate).toLocaleDateString('en-IN') : undefined },
-        { responseType: 'blob' }
-      );
-      const url = URL.createObjectURL(res.data);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${letterType}-${Date.now()}.txt`;
-      a.click();
-      URL.revokeObjectURL(url);
+      const selectedTeamObj = teams?.items.find((t) => t._id === teamId);
+      const dateStr = reviewDate ? new Date(reviewDate).toLocaleDateString('en-IN') : undefined;
+      await downloadLetterPDF(letterType, teamId, dateStr, selectedTeamObj?.name);
+      toast.success('Downloaded official PDF letter');
     } catch (err) {
       toast.error(apiErrorMessage(err));
     } finally {

@@ -5,7 +5,7 @@ import { writeLimiter } from '../middleware/rateLimiters';
 
 const router = Router();
 router.use(requireAuth());
-router.use(requireRole('admin', 'coordinator'));
+router.use(requireRole('admin', 'coordinator', 'guide', 'panel', 'assistant'));
 
 router.get('/templates', listTemplates);
 router.get('/preview/:type', previewLetter);
