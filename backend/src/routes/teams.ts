@@ -2,7 +2,16 @@ import { Router } from 'express';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { createTeamSchema, inviteSchema, respondInviteSchema } from './teams.schemas';
-import { createTeam, inviteToTeam, listMyInvites, listTeams, lockTeam, respondToInvite } from '../controllers/teamsController';
+import {
+  createTeam,
+  inviteToTeam,
+  listMyInvites,
+  listTeams,
+  lockTeam,
+  respondToInvite,
+  deleteUnassignedTeams,
+  deleteSoloTeams,
+} from '../controllers/teamsController';
 import { writeLimiter } from '../middleware/rateLimiters';
 
 const router = Router();
@@ -14,5 +23,8 @@ router.post('/', requireRole('student', 'admin'), writeLimiter, validate(createT
 router.post('/:id/invite', requireRole('student'), writeLimiter, validate(inviteSchema), inviteToTeam);
 router.patch('/invites/:id', requireRole('student'), writeLimiter, validate(respondInviteSchema), respondToInvite);
 router.post('/:id/lock', requireRole('student'), writeLimiter, lockTeam);
+
+router.delete('/unassigned', requireRole('admin'), writeLimiter, deleteUnassignedTeams);
+router.delete('/solo', requireRole('admin'), writeLimiter, deleteSoloTeams);
 
 export default router;

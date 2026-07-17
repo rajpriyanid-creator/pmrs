@@ -16,8 +16,8 @@ import schedulingRoutes from './scheduling';
 import reportsRoutes from './reports';
 import documentsRoutes from './documents';
 import signaturesRoutes from './signatures';
-
 import designationLimitRoutes from './designationLimits';
+import instructionRoutes from './instructions';
 
 const router = Router();
 
@@ -39,5 +39,6 @@ router.use('/scheduling', schedulingRoutes);
 router.use('/reports', reportsRoutes);
 router.use('/documents', documentsRoutes);
 router.use('/signatures', signaturesRoutes);
+router.use('/instructions', instructionRoutes);
 
 export default router;

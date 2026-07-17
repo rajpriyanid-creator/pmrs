@@ -47,3 +47,17 @@ export function useAutoAssign() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['allocations'] }),
   });
 }
+
+export function useAutoAssignPanels() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (program: string) => {
+      const res = await api.post('/assignments/auto-assign-panels', { program });
+      return res.data as { assignedCount: number };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['allocations'] });
+      queryClient.invalidateQueries({ queryKey: ['panels'] });
+    },
+  });
+}

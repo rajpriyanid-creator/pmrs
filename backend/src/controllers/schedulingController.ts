@@ -281,19 +281,23 @@ export const generateSlotsForCoordinator = asyncHandler(async (req: Request, res
 });
 
 export const listScheduledSlots = asyncHandler(async (req: Request, res: Response) => {
-  const { teamId, reviewType, periodLabel } = req.query as Record<string, string>;
+  const { teamId, program, reviewType, periodLabel } = req.query as Record<string, string>;
   const filter: Record<string, unknown> = {};
   if (teamId) filter.teamId = teamId;
   if (reviewType) filter.reviewType = reviewType;
   if (periodLabel) filter.periodLabel = new RegExp(periodLabel, 'i');
 
   const slots = await ScheduledSlot.find(filter)
-    .populate('teamId', 'name')
-    .populate('facultyIds', 'name email')
+    .populate('teamId', 'name program')
+    .populate('facultyIds', 'name email designation')
     .sort({ startTime: 1 })
     .lean();
 
-  res.json({ slots });
+  const filtered = program
+    ? slots.filter((s: any) => s.teamId?.program?.toString() === program || s.teamId?.name === program)
+    : slots;
+
+  res.json({ slots: filtered });
 });
 
 export const clearSchedules = asyncHandler(async (req: Request, res: Response) => {

@@ -13,6 +13,16 @@ export function useTeamAttendance(teamId?: string, kind?: 'review' | 'semester')
   });
 }
 
+export function useProgramAttendance(program?: string, kind?: 'review' | 'semester') {
+  return useQuery({
+    queryKey: ['attendance', 'program', program, kind],
+    queryFn: async () => {
+      const res = await api.get<{ attendance: any[] }>('/attendance', { params: { program, kind } });
+      return res.data.attendance;
+    },
+  });
+}
+
 export function useSubmitAttendance() {
   const queryClient = useQueryClient();
   return useMutation({

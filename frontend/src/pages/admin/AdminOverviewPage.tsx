@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Globe, GraduationCap, ArrowRight, BookOpen, RefreshCw, LayoutDashboard, LogOut, Menu, X } from 'lucide-react';
 import { usePrograms } from '@/api/programs';
 import { useAuthStore } from '@/store/authStore';
+import { RoleSwitcher } from '@/components/RoleSwitcher';
 
 export function AdminOverviewPage() {
   const { data: programs, isLoading, refetch } = usePrograms();
@@ -153,9 +154,12 @@ export function AdminOverviewPage() {
 
       {/* Main Content Area */}
       <main className="flex-1 min-w-0 p-6 lg:p-10 pt-20 lg:pt-10 overflow-y-auto space-y-8">
-        <div>
-          <h1 className="font-display text-2xl font-bold tracking-tight text-[var(--color-ink)]">Admin Overview</h1>
-          <p className="mt-1 text-xs text-[var(--color-ink-faint)]">Select a context from the side panel to manage students, panels, and reviews.</p>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="font-display text-2xl font-bold tracking-tight text-[var(--color-ink)]">Admin Overview</h1>
+            <p className="mt-1 text-xs text-[var(--color-ink-faint)]">Select a context from the side panel to manage students, panels, and reviews.</p>
+          </div>
+          <RoleSwitcher />
         </div>
 
         {/* GLOBAL MANAGEMENT SECTION */}

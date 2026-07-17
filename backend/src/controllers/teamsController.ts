@@ -16,7 +16,6 @@ export const listTeams = asyncHandler(async (req: Request, res: Response) => {
   if (req.query.program) filter.program = req.query.program;
   if (req.query.status) filter.status = req.query.status;
 
-  // Non-admin faculty are implicitly scoped to their own program context.
   if (req.auth!.role !== 'admin' && req.auth!.role !== 'assistant' && req.auth!.programId) {
     filter.program = req.auth!.programId;
   }
@@ -45,7 +44,6 @@ export const listTeams = asyncHandler(async (req: Request, res: Response) => {
   ]);
   res.json(paginated(items, total, pagination));
 });
-
 
 export const createTeam = asyncHandler(async (req: Request, res: Response) => {
   const { name, program, studentIds } = req.body as { name: string; program: string; studentIds: string[] };
@@ -106,7 +104,6 @@ export const lockTeam = asyncHandler(async (req: Request, res: Response) => {
   const team = await Team.findById(id);
   if (!team) throw ApiError.notFound('Team not found');
   if (team.status === 'locked' || team.status === 'active') {
-    // One-directional: once locked, no member action can reverse it.
     throw ApiError.conflict('Team is already locked and cannot be reopened by a member action');
   }
 
@@ -131,4 +128,26 @@ export const listMyInvites = asyncHandler(async (req: Request, res: Response) =>
     .sort({ createdAt: -1 })
     .lean();
   res.json({ invites });
+});
+
+/** DELETE /teams/unassigned — delete all teams that have no guide assigned. */
+export const deleteUnassignedTeams = asyncHandler(async (req: Request, res: Response) => {
+  const { program } = req.query as { program?: string };
+  const filter: Record<string, unknown> = { guideId: { $exists: false } };
+  if (program) filter.program = program;
+
+  const result = await Team.deleteMany(filter);
+  await recordAudit(req.auth!, 'delete-unassigned-teams', 'Team', req.auth!.userId, { deletedCount: result.deletedCount });
+  res.json({ ok: true, deletedCount: result.deletedCount });
+});
+
+/** DELETE /teams/solo — delete all teams with only 1 member. */
+export const deleteSoloTeams = asyncHandler(async (req: Request, res: Response) => {
+  const { program } = req.query as { program?: string };
+  const filter: Record<string, unknown> = { 'students.0': { $exists: true }, 'students.1': { $exists: false } };
+  if (program) filter.program = program;
+
+  const result = await Team.deleteMany(filter);
+  await recordAudit(req.auth!, 'delete-solo-teams', 'Team', req.auth!.userId, { deletedCount: result.deletedCount });
+  res.json({ ok: true, deletedCount: result.deletedCount });
 });

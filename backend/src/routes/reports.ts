@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { requireAuth, requireRole } from '../middleware/auth';
-import { uploadReport, listReports, downloadReport, approveReport } from '../controllers/reportsController';
+import { uploadReport, listReports, downloadReport, approveReport, rejectReport } from '../controllers/reportsController';
 import multer from 'multer';
 import path from 'path';
 import { env } from '../config/env';
@@ -31,5 +31,6 @@ router.get('/', listReports);
 router.post('/upload', writeLimiter, reportUpload.single('report'), uploadReport);
 router.get('/:id/download', downloadReport);
 router.patch('/:id/approve', requireRole('guide'), writeLimiter, approveReport);
+router.patch('/:id/reject', requireRole('guide'), writeLimiter, rejectReport);
 
 export default router;

@@ -73,3 +73,25 @@ export function useLockTeam() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['teams'] }),
   });
 }
+
+export function useDeleteUnassignedTeams() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (program?: string) => {
+      const res = await api.delete<{ ok: boolean; deletedCount: number }>('/teams/unassigned', { params: { program } });
+      return res.data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['teams'] }),
+  });
+}
+
+export function useDeleteSoloTeams() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (program?: string) => {
+      const res = await api.delete<{ ok: boolean; deletedCount: number }>('/teams/solo', { params: { program } });
+      return res.data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['teams'] }),
+  });
+}

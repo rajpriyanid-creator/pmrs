@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { autoAssign, batchUpdateAssignments, getAllocationTable } from '../controllers/assignmentsController';
+import { autoAssignPanels } from '../controllers/assignmentController';
 import { writeLimiter } from '../middleware/rateLimiters';
 
 const objectId = z.string().length(24);
@@ -36,5 +37,6 @@ router.use(requireAuth(), requireRole('admin'));
 router.get('/', getAllocationTable);
 router.patch('/batch', writeLimiter, validate(batchSchema), batchUpdateAssignments);
 router.post('/auto-assign', writeLimiter, validate(autoAssignSchema), autoAssign);
+router.post('/auto-assign-panels', writeLimiter, validate(autoAssignSchema), autoAssignPanels);
 
 export default router;

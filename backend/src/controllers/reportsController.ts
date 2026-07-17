@@ -21,11 +21,21 @@ export const uploadReport = asyncHandler(async (req: Request, res: Response) => 
     throw ApiError.badRequest('Your team is still forming. Please lock your team before uploading the final report.');
   }
 
-  // Overwrite existing report for this team
   const existing = await FinalReport.findOne({ teamId: team._id });
+  let rejections: any[] = existing?.rejections ?? [];
+
   if (existing) {
-    // Remove old file if it exists
-    try { fs.unlinkSync(existing.filePath); } catch { /* ignore */ }
+    if (existing.status === 'rejected') {
+      // Archive current rejected file into rejections history
+      rejections.push({
+        filePath: existing.filePath,
+        filename: existing.filename,
+        remarks: existing.remarks || 'No remarks provided',
+        rejectedAt: existing.updatedAt || new Date(),
+      });
+    } else {
+      try { fs.unlinkSync(existing.filePath); } catch { /* ignore */ }
+    }
     await FinalReport.findByIdAndDelete(existing._id);
   }
 
@@ -36,12 +46,12 @@ export const uploadReport = asyncHandler(async (req: Request, res: Response) => 
     filename: req.file.originalname,
     mimeType: req.file.mimetype,
     status: 'uploaded',
+    remarks: '',
+    rejections,
   });
 
-  // Notify guide
   if (team.guideId) {
-    await notify('Faculty', team.guideId.toString(), 'report:uploaded',
-      `Team "${team.name}" has uploaded their final report.`);
+    await notify('Faculty', team.guideId.toString(), 'report:uploaded', `Team "${team.name}" has uploaded their final report.`);
   }
 
   res.status(201).json({ report: { ...report.toObject(), filePath: undefined } });
@@ -53,7 +63,6 @@ export const listReports = asyncHandler(async (req: Request, res: Response) => {
   let reports: any[] = [];
 
   if (auth.role === 'guide') {
-    // Guide sees only their teams' reports
     const teams = await Team.find({ guideId: auth.userId }).select('_id').lean();
     const teamIds = teams.map((t) => t._id);
     if (teamIds.length === 0) return res.json({ reports: [] });
@@ -80,12 +89,11 @@ export const listReports = asyncHandler(async (req: Request, res: Response) => {
     throw ApiError.forbidden('Not authorised to view reports');
   }
 
-  // Strip filePaths from non-privileged users
   const safe = reports.map((r) => ({ ...r, filePath: undefined }));
   res.json({ reports: safe });
 });
 
-/** GET /reports/:id/download — download the report file (guide/admin/coordinator/student team member). */
+/** GET /reports/:id/download — download report file. */
 export const downloadReport = asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
   const auth = req.auth!;
@@ -128,13 +136,44 @@ export const approveReport = asyncHandler(async (req: Request, res: Response) =>
 
   const updated = await FinalReport.findByIdAndUpdate(
     id,
-    { status: 'approved', approvedBy: auth.userId, approvedAt: new Date() },
+    { status: 'approved', approvedBy: auth.userId, approvedAt: new Date(), remarks: '' },
     { new: true }
   );
 
-  // Notify students
   for (const studentId of (report.teamId?.students ?? [])) {
     await notify('Student', studentId.toString(), 'report:approved', 'Your final report has been approved by your guide.');
+  }
+
+  res.json({ report: { ...updated?.toObject(), filePath: undefined } });
+});
+
+/** PATCH /reports/:id/reject — guide rejects a final report with remarks. */
+export const rejectReport = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { remarks } = req.body as { remarks?: string };
+  const auth = req.auth!;
+
+  if (auth.role !== 'guide') throw ApiError.forbidden('Only guides may reject reports');
+
+  const report = await FinalReport.findById(id).populate('teamId', 'guideId students').lean() as any;
+  if (!report) throw ApiError.notFound('Report not found');
+  if (report.teamId?.guideId?.toString() !== auth.userId) {
+    throw ApiError.forbidden('You are not the guide for this team');
+  }
+
+  const updated = await FinalReport.findByIdAndUpdate(
+    id,
+    {
+      status: 'rejected',
+      remarks: remarks || 'Report rejected. Please update and re-upload.',
+      approvedBy: null,
+      approvedAt: null,
+    },
+    { new: true }
+  );
+
+  for (const studentId of (report.teamId?.students ?? [])) {
+    await notify('Student', studentId.toString(), 'report:rejected', `Your final report was rejected by your guide. Remarks: ${remarks || 'Needs revision'}`);
   }
 
   res.json({ report: { ...updated?.toObject(), filePath: undefined } });

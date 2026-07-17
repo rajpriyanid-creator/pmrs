@@ -8,12 +8,22 @@ import { notify } from '../services/notificationService';
 import { buildWorkbook, ColumnDef } from '../services/excelService';
 
 export const getAttendance = asyncHandler(async (req: Request, res: Response) => {
-  const { teamId, kind } = req.query as { teamId: string; kind?: 'review' | 'semester' };
-  if (!teamId) throw ApiError.badRequest('teamId is required');
-  const filter: Record<string, unknown> = { teamId };
+  const { teamId, program, kind } = req.query as { teamId?: string; program?: string; kind?: 'review' | 'semester' };
+  const filter: Record<string, unknown> = {};
+  if (teamId) filter.teamId = teamId;
   if (kind) filter.kind = kind;
-  const records = await Attendance.find(filter).populate('perStudent.studentId', 'name rollNo').lean();
-  res.json({ attendance: records });
+
+  const records = await Attendance.find(filter)
+    .populate('teamId', 'name program')
+    .populate('perStudent.studentId', 'name rollNo')
+    .sort({ createdAt: -1 })
+    .lean();
+
+  const filtered = program
+    ? records.filter((r: any) => r.teamId?.program?.toString() === program || r.teamId?.name === program)
+    : records;
+
+  res.json({ attendance: filtered });
 });
 
 /** POST /attendance/:teamId/submit — coordinator only, date/time + checkboxes saved together (spec 6.6). */

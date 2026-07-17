@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { MarksEntry, MarksSummary } from '../models/Marks';
 import { Review } from '../models/Review';
 import { Team } from '../models/Team';
+import { Faculty } from '../models/Faculty';
 import { asyncHandler } from '../utils/asyncHandler';
 import { ApiError } from '../utils/ApiError';
 import { recordAudit } from '../services/auditService';
@@ -57,6 +58,11 @@ export const submitMarks = asyncHandler(async (req: Request, res: Response) => {
   if (!review) throw ApiError.notFound('Review not found');
   if (!review.hasMarks) throw ApiError.badRequest('Review 0 does not accept marks');
   if (review.closed) throw ApiError.conflict('This review has been closed for marks entry');
+
+  const faculty = await Faculty.findById(req.auth!.userId);
+  if (faculty?.memberType === 'external' && review.type !== 'viva') {
+    throw ApiError.forbidden('External panel members are restricted to submitting marks only for Viva slots');
+  }
 
   if (req.auth!.role !== 'guide' && req.auth!.role !== 'panel') {
     throw ApiError.forbidden('Only Guide and Panel Member roles may enter marks');

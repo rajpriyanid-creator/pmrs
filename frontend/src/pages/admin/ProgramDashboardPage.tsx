@@ -12,6 +12,23 @@ import {
   LogOut,
   Menu,
   X,
+  FileText,
+  FileSignature,
+  FileCheck,
+  Wand2,
+  Trash2,
+  Download,
+  Upload,
+  Plus,
+  Check,
+  AlertCircle,
+  Eye,
+  BarChart2,
+  Clock,
+  CheckCircle2,
+  XCircle,
+  Play,
+  Filter,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { usePrograms } from '@/api/programs';
@@ -24,10 +41,32 @@ import {
   downloadStudentTemplate,
 } from '@/api/students';
 import { useReviewPanels, useUpsertReviewPanel } from '@/api/panels';
+import {
+  useAllocationTable,
+  useAutoAssign,
+  useAutoAssignPanels,
+} from '@/api/assignments';
+import { useDeleteUnassignedTeams, useDeleteSoloTeams } from '@/api/teams';
+import { useInstructions, useCreateInstruction, useDeleteInstruction } from '@/api/instructions';
+import {
+  useLetterTemplates,
+  usePreviewLetter,
+  useSignatures,
+  useCreateSignature,
+  useDeleteSignature,
+} from '@/api/documents';
+import { useReports, useApproveReport, useRejectReport } from '@/api/reports';
+import { useProgramAttendance, downloadAttendance } from '@/api/attendance';
+import {
+  useScheduledSlots,
+  useGenerateSchedules,
+  useClearSchedules,
+  useDeleteScheduledSlot,
+} from '@/api/scheduling';
 import { triggerDownload } from '@/lib/download';
 import { toast } from '@/components/ui/Toast';
 import { apiErrorMessage, api } from '@/api/client';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 
 export function ProgramDashboardPage() {
   const { programId } = useParams<{ programId: string }>();
@@ -57,6 +96,9 @@ export function ProgramDashboardPage() {
     { id: 'settings', label: 'Settings', icon: Sliders },
     { id: 'review-panels', label: 'Review Panels', icon: LayoutGrid },
     { id: 'team-panel-allocations', label: 'Team Panel Allocations', icon: GitBranch },
+    { id: 'instructions', label: 'Instruction Templates', icon: FileText },
+    { id: 'official-letters', label: 'Official Letters & Signatures', icon: FileSignature },
+    { id: 'final-reports', label: 'Final Reports & Audits', icon: FileCheck },
     { id: 'review-attendance', label: 'Review Attendance', icon: ClipboardCheck },
     { id: 'student-attendance', label: 'Student Attendance', icon: UserCheck },
     { id: 'schedules', label: 'Schedules', icon: Calendar },
@@ -135,7 +177,7 @@ export function ProgramDashboardPage() {
           <button onClick={() => setMobileOpen(!mobileOpen)} className="p-1.5 rounded-lg bg-white/10 text-[var(--color-paper)]">
             {mobileOpen ? <X size={18} /> : <Menu size={18} />}
           </button>
-          <span className="font-display font-semibold text-sm">Admin ({program.name})</span>
+          <span className="font-display font-semibold text-sm">Dashboard ({program.name})</span>
         </div>
       </div>
 
@@ -147,13 +189,16 @@ export function ProgramDashboardPage() {
       )}
 
       {/* Main Content Area */}
-      <main className="flex-1 min-w-0 p-6 lg:p-10 pt-20 lg:pt-10 overflow-y-auto">
-        {activeTab === 'student-registration' && <StudentRegistrationTab programName={program.name} />}
-        {activeTab === 'settings' && <AdminSettingsTab programName={program.name} />}
+      <main className="flex-1 min-w-0 p-6 lg:p-10 pt-20 lg:pt-10 overflow-y-auto space-y-6">
+        {activeTab === 'student-registration' && <StudentRegistrationTab programId={program._id} programName={program.name} />}
+        {activeTab === 'settings' && <SettingsTab programId={program._id} programName={program.name} maxTeamSize={program.maxTeamSize} />}
         {activeTab === 'review-panels' && <ReviewPanelsTab programName={program.name} />}
-        {activeTab === 'team-panel-allocations' && <TeamPanelAllocationsTab programName={program.name} />}
+        {activeTab === 'team-panel-allocations' && <TeamPanelAllocationsTab programId={program._id} programName={program.name} />}
+        {activeTab === 'instructions' && <InstructionsTab programName={program.name} />}
+        {activeTab === 'official-letters' && <OfficialLettersTab programId={program._id} programName={program.name} />}
+        {activeTab === 'final-reports' && <FinalReportsTab programName={program.name} />}
         {activeTab === 'review-attendance' && <ReviewAttendanceTab programName={program.name} />}
-        {activeTab === 'student-attendance' && <StudentAttendanceTab programName={program.name} />}
+        {activeTab === 'student-attendance' && <StudentAttendanceTab programId={program._id} programName={program.name} />}
         {activeTab === 'schedules' && <SchedulesTab programName={program.name} />}
       </main>
     </div>
@@ -163,153 +208,111 @@ export function ProgramDashboardPage() {
 /* -------------------------------------------------------------------------- */
 /* TAB 1: STUDENT REGISTRATION                                                */
 /* -------------------------------------------------------------------------- */
-function StudentRegistrationTab({ programName }: { programName: string }) {
-  const { data: studentsData, refetch } = useStudentList(programName);
+function StudentRegistrationTab({ programId, programName }: { programId: string; programName: string }) {
+  const { data: studentData, refetch } = useStudentList(programId);
   const deleteStudentMutation = useDeleteStudent();
   const deleteAllStudentsMutation = useDeleteAllStudents();
   const importStudentsMutation = useImportStudents();
-
-  const [fileName, setFileName] = useState('');
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [showStudents, setShowStudents] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function handleDownloadTemplate() {
     try {
-      const res = await downloadStudentTemplate();
-      triggerDownload(res.data, 'student-template.csv');
-    } catch (err) {
-      toast.error(apiErrorMessage(err));
+      const blob = await downloadStudentTemplate();
+      triggerDownload(blob, `student-template-${programName.toLowerCase().replace(/\s+/g, '-')}.csv`);
+      toast.success('Downloaded student CSV template');
+    } catch (e) {
+      toast.error(apiErrorMessage(e));
     }
   }
 
-  async function handleUploadStudents() {
-    const file = fileRef.current?.files?.[0];
-    if (!file) {
-      toast.error('Please choose a file first');
-      return;
-    }
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
     try {
-      const res = await importStudentsMutation.mutateAsync({ file, program: programName });
-      toast.success(`Imported ${res.createdCount} student(s)`);
-      setFileName('');
-      if (fileRef.current) fileRef.current.value = '';
+      const res = await importStudentsMutation.mutateAsync({ file, programId });
+      toast.success(`Imported ${res.inserted} students`);
+      refetch();
     } catch (err) {
       toast.error(apiErrorMessage(err));
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }
+
+  async function handleDeleteStudent(regNo: string) {
+    if (!confirm(`Are you sure you want to delete student ${regNo}?`)) return;
+    try {
+      await deleteStudentMutation.mutateAsync(regNo);
+      toast.success(`Deleted student ${regNo}`);
+      refetch();
+    } catch (e) {
+      toast.error(apiErrorMessage(e));
     }
   }
 
   async function handleDeleteAll() {
-    if (!window.confirm(`Delete all students registered under ${programName}?`)) return;
+    if (!confirm(`WARNING: Are you sure you want to delete ALL students in ${programName}?`)) return;
     try {
-      const res = await deleteAllStudentsMutation.mutateAsync(programName);
-      toast.success(`Deleted ${res.deletedCount} student(s)`);
-    } catch (err) {
-      toast.error(apiErrorMessage(err));
+      await deleteAllStudentsMutation.mutateAsync(programId);
+      toast.success(`Deleted all students in ${programName}`);
+      refetch();
+    } catch (e) {
+      toast.error(apiErrorMessage(e));
     }
   }
 
   return (
-    <div className="bg-white rounded-xl border border-[var(--color-ink)]/10 shadow-[var(--shadow-card)] p-8 space-y-6">
-      <div>
-        <h1 className="font-display text-2xl font-bold text-[var(--color-ink)]">Student Management — {programName}</h1>
-        <h2 className="text-xs font-semibold text-[var(--color-ink-faint)] mt-1">Programme-wise student database ({programName})</h2>
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="font-display text-2xl font-bold text-[var(--color-ink)]">Student Registration — {programName}</h1>
+          <p className="text-xs text-[var(--color-ink-faint)] mt-1">Manage student enrollments and bulk CSV imports for this programme.</p>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={handleDownloadTemplate} className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-white border border-[var(--color-ink)]/15 hover:border-[var(--color-seal)] text-[var(--color-ink)] transition-colors flex items-center gap-2 shadow-xs">
+            <Download size={14} /> Template
+          </button>
+          <button onClick={() => fileInputRef.current?.click()} className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-[var(--color-seal)] hover:bg-[var(--color-seal)]/90 text-[var(--color-paper)] transition-colors flex items-center gap-2 shadow-sm">
+            <Upload size={14} /> Bulk Upload CSV
+          </button>
+          <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleFileChange} />
+          <button onClick={handleDeleteAll} className="px-3 py-2 rounded-xl text-xs font-semibold bg-[var(--color-flag-soft)] text-[var(--color-flag)] hover:bg-[var(--color-flag)] hover:text-white transition-colors flex items-center gap-1.5">
+            <Trash2 size={14} /> Delete All
+          </button>
+        </div>
       </div>
 
-      <div className="space-y-4">
-        {/* Top actions */}
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            onClick={handleDownloadTemplate}
-            className="px-4 py-2 rounded-lg text-xs font-semibold bg-[var(--color-seal)] hover:bg-[var(--color-seal)]/90 text-[var(--color-paper)] shadow-sm transition-colors"
-          >
-            Download Student CSV Template
-          </button>
-
-          <div className="flex items-center border border-[var(--color-ink)]/15 rounded-lg p-1 bg-[var(--color-paper)]">
-            <label className="cursor-pointer bg-[var(--color-paper-dim)] px-3 py-1.5 rounded text-xs font-medium text-[var(--color-ink)] hover:bg-[var(--color-ink)]/6 transition-colors">
-              Choose File
-              <input
-                ref={fileRef}
-                type="file"
-                accept=".xlsx,.xls,.csv"
-                className="hidden"
-                onChange={(e) => setFileName(e.target.files?.[0]?.name || '')}
-              />
-            </label>
-            <span className="text-xs font-data text-[var(--color-ink-faint)] px-3 max-w-[180px] truncate">{fileName || 'No file chosen'}</span>
-          </div>
-
-          <button
-            onClick={handleUploadStudents}
-            disabled={importStudentsMutation.isPending}
-            className="px-5 py-2 rounded-lg text-xs font-semibold bg-[var(--color-ink)] hover:bg-[var(--color-ink-soft)] text-[var(--color-paper)] shadow-sm transition-colors disabled:opacity-50"
-          >
-            Upload Students
-          </button>
+      <div className="bg-white rounded-xl border border-[var(--color-ink)]/10 shadow-[var(--shadow-card)] overflow-hidden">
+        <div className="p-4 border-b border-[var(--color-ink)]/10 flex items-center justify-between bg-[var(--color-paper)]/50">
+          <span className="text-xs font-bold text-[var(--color-ink-soft)] uppercase tracking-wider">Enrolled Students ({studentData?.items.length ?? 0})</span>
         </div>
-
-        {/* View & Delete All Buttons */}
-        <div className="flex items-center gap-3 pt-2">
-          <button
-            onClick={() => {
-              setShowStudents(!showStudents);
-              refetch();
-            }}
-            className="px-5 py-2 rounded-lg text-xs font-semibold bg-[var(--color-verdant)] hover:bg-[var(--color-verdant)]/90 text-[var(--color-paper)] shadow-sm transition-colors"
-          >
-            {showStudents ? 'Hide Students' : 'View Registered Students'}
-          </button>
-          <button
-            onClick={handleDeleteAll}
-            disabled={deleteAllStudentsMutation.isPending}
-            className="px-5 py-2 rounded-lg text-xs font-semibold bg-[var(--color-flag)] hover:bg-[var(--color-flag)]/90 text-[var(--color-paper)] shadow-sm transition-colors disabled:opacity-50"
-          >
-            Delete All Students
-          </button>
-        </div>
-
-        {/* Students Table */}
-        {showStudents && (
-          <div className="mt-4 border border-[var(--color-ink)]/10 rounded-xl overflow-hidden shadow-sm">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-[var(--color-paper-dim)] text-[var(--color-ink)] font-semibold border-b border-[var(--color-ink)]/10">
-                <tr>
-                  <th className="p-3">Roll No</th>
-                  <th className="p-3">Name</th>
-                  <th className="p-3">Email</th>
-                  <th className="p-3">Programme</th>
-                  <th className="p-3 text-right">Action</th>
+        {studentData?.items.length === 0 ? (
+          <div className="p-12 text-center text-xs text-[var(--color-ink-faint)] font-medium">No students enrolled yet. Upload a CSV file above.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-[var(--color-ink)]/10 bg-[var(--color-paper)]/30 font-semibold text-[var(--color-ink-soft)]">
+                  <th className="p-3.5 pl-6">Register No</th>
+                  <th className="p-3.5">Name</th>
+                  <th className="p-3.5">Email</th>
+                  <th className="p-3.5 text-right pr-6">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[var(--color-ink)]/8">
-                {studentsData?.items?.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="p-6 text-center text-[var(--color-ink-faint)]">
-                      No students registered yet for {programName}.
+              <tbody className="divide-y divide-[var(--color-ink)]/5">
+                {studentData?.items.map((st) => (
+                  <tr key={st._id} className="hover:bg-[var(--color-paper-dim)]/50 transition-colors">
+                    <td className="p-3.5 pl-6 font-data font-medium text-[var(--color-ink)]">{st.regNo}</td>
+                    <td className="p-3.5 font-semibold text-[var(--color-ink)]">{st.name}</td>
+                    <td className="p-3.5 text-[var(--color-ink-faint)]">{st.email}</td>
+                    <td className="p-3.5 text-right pr-6">
+                      <button onClick={() => handleDeleteStudent(st.regNo)} className="p-1.5 rounded hover:bg-[var(--color-flag-soft)] text-[var(--color-flag)] transition-colors">
+                        <Trash2 size={14} />
+                      </button>
                     </td>
                   </tr>
-                ) : (
-                  studentsData?.items?.map((st) => (
-                    <tr key={st._id} className="hover:bg-[var(--color-paper-dim)]/50">
-                      <td className="p-3 font-data font-semibold text-[var(--color-ink)]">{st.rollNo}</td>
-                      <td className="p-3 font-medium">{st.name}</td>
-                      <td className="p-3 text-[var(--color-ink-faint)] font-data">{st.email}</td>
-                      <td className="p-3">{st.program}</td>
-                      <td className="p-3 text-right">
-                        <button
-                          onClick={async () => {
-                            if (window.confirm(`Delete ${st.name}?`)) {
-                              await deleteStudentMutation.mutateAsync(st._id);
-                            }
-                          }}
-                          className="text-[var(--color-flag)] hover:underline font-semibold"
-                        >
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
+                ))}
               </tbody>
             </table>
           </div>
@@ -322,260 +325,92 @@ function StudentRegistrationTab({ programName }: { programName: string }) {
 /* -------------------------------------------------------------------------- */
 /* TAB 2: SETTINGS                                                            */
 /* -------------------------------------------------------------------------- */
-function AdminSettingsTab({ programName }: { programName: string }) {
-  const [subTab, setSubTab] = useState<'guide' | 'teamsize' | 'review'>('guide');
-  const qc = useQueryClient();
-
-  const { data: config } = useQuery({
-    queryKey: ['admin-config'],
-    queryFn: async () => {
-      const res = await api.get('/admin-config');
-      return res.data.config || {};
-    },
-  });
-
-  const [startDateTime, setStartDateTime] = useState('');
-  const [endDateTime, setEndDateTime] = useState('');
-  const [minTeamSize, setMinTeamSize] = useState(1);
-  const [maxTeamSize, setMaxTeamSize] = useState(4);
+function SettingsTab({ programId, programName, maxTeamSize }: { programId: string; programName: string; maxTeamSize: number }) {
+  const [teamSize, setTeamSize] = useState(maxTeamSize);
   const [numReviews, setNumReviews] = useState(3);
   const [vivaRequired, setVivaRequired] = useState(true);
 
+  const { data: config } = useQuery({
+    queryKey: ['admin-config', programId],
+    queryFn: async () => {
+      const res = await api.get<{ config: { numReviews: number; vivaRequired: boolean } }>('/admin-config', { params: { program: programId } });
+      return res.data.config;
+    },
+  });
+
   useEffect(() => {
     if (config) {
-      if (config.guideSelectionWindowStart) {
-        setStartDateTime(new Date(config.guideSelectionWindowStart).toISOString().slice(0, 16));
-      }
-      if (config.guideSelectionWindowEnd) {
-        setEndDateTime(new Date(config.guideSelectionWindowEnd).toISOString().slice(0, 16));
-      }
+      setNumReviews(config.numReviews ?? 3);
+      setVivaRequired(config.vivaRequired ?? true);
     }
   }, [config]);
 
-  async function handleSaveGuideSettings(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSaveTeamSize() {
     try {
-      await api.patch('/admin-config', {
-        guideSelectionOpen: true,
-        guideSelectionWindowStart: startDateTime ? new Date(startDateTime).toISOString() : null,
-        guideSelectionWindowEnd: endDateTime ? new Date(endDateTime).toISOString() : null,
-      });
-      toast.success('Guide Selection settings updated.');
-      qc.invalidateQueries({ queryKey: ['admin-config'] });
-    } catch (err) {
-      toast.error(apiErrorMessage(err));
+      await api.patch(`/programs/${programId}`, { maxTeamSize: teamSize });
+      toast.success('Updated team size limit');
+    } catch (e) {
+      toast.error(apiErrorMessage(e));
     }
   }
 
   async function handleSaveReviewSettings() {
     try {
-      await api.patch('/admin-config', {
-        numReviews,
-        vivaRequired,
-      });
-      toast.success('Review settings saved.');
-      qc.invalidateQueries({ queryKey: ['admin-config'] });
-    } catch (err) {
-      toast.error(apiErrorMessage(err));
+      await api.post('/admin-config/reviews-viva', { program: programId, numReviews, vivaRequired });
+      toast.success('Saved review configuration settings');
+    } catch (e) {
+      toast.error(apiErrorMessage(e));
     }
   }
 
   return (
-    <div className="bg-white rounded-xl border border-[var(--color-ink)]/10 shadow-[var(--shadow-card)] overflow-hidden space-y-6">
-      {/* Dark Ink Banner with Brass Accent */}
-      <div className="bg-[var(--color-ink)] text-[var(--color-paper)] p-8 border-b-2 border-[var(--color-seal)]">
-        <h1 className="font-display text-3xl font-bold tracking-tight">Admin Settings — {programName}</h1>
+    <div className="space-y-6">
+      <div>
+        <h1 className="font-display text-2xl font-bold text-[var(--color-ink)]">Programme Settings — {programName}</h1>
+        <p className="text-xs text-[var(--color-ink-faint)] mt-1">Configure team formation rules, maximum team sizes, and review evaluation parameters.</p>
       </div>
 
-      <div className="px-8 pb-8 space-y-6">
-        {/* Sub-tabs header */}
-        <div className="flex border-b border-[var(--color-ink)]/10">
-          <button
-            onClick={() => setSubTab('guide')}
-            className={`px-5 py-3 text-xs font-semibold transition-all border-b-2 ${
-              subTab === 'guide'
-                ? 'border-[var(--color-seal)] text-[var(--color-seal)] font-bold'
-                : 'border-transparent text-[var(--color-ink-faint)] hover:text-[var(--color-ink)]'
-            }`}
-          >
-            Guide Selection Settings
-          </button>
-          <button
-            onClick={() => setSubTab('teamsize')}
-            className={`px-5 py-3 text-xs font-semibold transition-all border-b-2 ${
-              subTab === 'teamsize'
-                ? 'border-[var(--color-seal)] text-[var(--color-seal)] font-bold'
-                : 'border-transparent text-[var(--color-ink-faint)] hover:text-[var(--color-ink)]'
-            }`}
-          >
-            Team Size Configuration
-          </button>
-          <button
-            onClick={() => setSubTab('review')}
-            className={`px-5 py-3 text-xs font-semibold transition-all border-b-2 ${
-              subTab === 'review'
-                ? 'border-[var(--color-seal)] text-[var(--color-seal)] font-bold'
-                : 'border-transparent text-[var(--color-ink-faint)] hover:text-[var(--color-ink)]'
-            }`}
-          >
-            Review Configuration
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="bg-white rounded-xl border border-[var(--color-ink)]/10 shadow-[var(--shadow-card)] p-6 space-y-4">
+          <h2 className="font-display text-base font-bold text-[var(--color-ink)]">Team Size Settings</h2>
+          <p className="text-xs text-[var(--color-ink-faint)]">Maximum number of students permitted per project team in {programName}.</p>
+          <div className="space-y-2">
+            <label className="block text-xs font-semibold text-[var(--color-ink-soft)]">Max Team Size</label>
+            <input
+              type="number"
+              min={1}
+              max={10}
+              value={teamSize}
+              onChange={(e) => setTeamSize(Number(e.target.value))}
+              className="w-full px-3.5 py-2.5 rounded-lg border border-[var(--color-ink)]/15 text-xs font-data"
+            />
+          </div>
+          <button onClick={handleSaveTeamSize} className="w-full py-2.5 rounded-xl text-xs font-semibold bg-[var(--color-seal)] text-[var(--color-paper)] shadow-xs">
+            Save Team Size
           </button>
         </div>
 
-        {/* Sub-tab 1: Guide Settings */}
-        {subTab === 'guide' && (
-          <div className="max-w-md bg-[var(--color-paper)] rounded-xl p-6 border border-[var(--color-ink)]/10 space-y-5">
-            <h2 className="font-display text-base font-bold text-[var(--color-ink)]">Guide Selection Request Window</h2>
-
-            <form onSubmit={handleSaveGuideSettings} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-[var(--color-ink-soft)] mb-1">Start Date & Time</label>
-                <input
-                  type="datetime-local"
-                  value={startDateTime}
-                  onChange={(e) => setStartDateTime(e.target.value)}
-                  className="w-full text-xs font-data px-3.5 py-2.5 rounded-lg border border-[var(--color-ink)]/15 focus:outline-none focus:border-[var(--color-seal)] bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[var(--color-ink-soft)] mb-1">End Date & Time</label>
-                <input
-                  type="datetime-local"
-                  value={endDateTime}
-                  onChange={(e) => setEndDateTime(e.target.value)}
-                  className="w-full text-xs font-data px-3.5 py-2.5 rounded-lg border border-[var(--color-ink)]/15 focus:outline-none focus:border-[var(--color-seal)] bg-white"
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="px-5 py-2.5 rounded-lg text-xs font-semibold bg-[var(--color-seal)] hover:bg-[var(--color-seal)]/90 text-[var(--color-paper)] shadow-sm transition-colors"
-              >
-                Update Guide Settings
-              </button>
-            </form>
+        <div className="bg-white rounded-xl border border-[var(--color-ink)]/10 shadow-[var(--shadow-card)] p-6 space-y-4">
+          <h2 className="font-display text-base font-bold text-[var(--color-ink)]">Review & Viva Settings</h2>
+          <div className="space-y-3">
+            <label className="block text-xs font-semibold text-[var(--color-ink-soft)]">Number of Reviews ({numReviews})</label>
+            <input
+              type="range"
+              min={1}
+              max={10}
+              value={numReviews}
+              onChange={(e) => setNumReviews(Number(e.target.value))}
+              className="w-full accent-[var(--color-seal)]"
+            />
           </div>
-        )}
-
-        {/* Sub-tab 2: Team Size */}
-        {subTab === 'teamsize' && (
-          <div className="max-w-md bg-[var(--color-paper)] rounded-xl p-6 border border-[var(--color-ink)]/10 space-y-5">
-            <h2 className="font-display text-base font-bold text-[var(--color-ink)]">Programme-wise Team Size Settings</h2>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-[var(--color-ink-soft)] mb-1">Min Team Size</label>
-                <input
-                  type="number"
-                  min={1}
-                  value={minTeamSize}
-                  onChange={(e) => setMinTeamSize(Number(e.target.value))}
-                  className="w-full text-xs font-data px-3.5 py-2.5 rounded-lg border border-[var(--color-ink)]/15 bg-white"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-[var(--color-ink-soft)] mb-1">Max Team Size</label>
-                <input
-                  type="number"
-                  min={1}
-                  value={maxTeamSize}
-                  onChange={(e) => setMaxTeamSize(Number(e.target.value))}
-                  className="w-full text-xs font-data px-3.5 py-2.5 rounded-lg border border-[var(--color-ink)]/15 bg-white"
-                />
-              </div>
-            </div>
-            <button
-              onClick={() => toast.success('Team size settings saved.')}
-              className="px-5 py-2.5 rounded-lg text-xs font-semibold bg-[var(--color-seal)] hover:bg-[var(--color-seal)]/90 text-[var(--color-paper)] shadow-sm transition-colors"
-            >
-              Save Team Size
-            </button>
+          <div className="flex items-center justify-between p-3 bg-[var(--color-paper)]/50 rounded-lg border border-[var(--color-ink)]/10">
+            <span className="text-xs font-semibold text-[var(--color-ink)]">Enable Viva Session</span>
+            <input type="checkbox" checked={vivaRequired} onChange={(e) => setVivaRequired(e.target.checked)} className="accent-[var(--color-seal)]" />
           </div>
-        )}
-
-        {/* Sub-tab 3: Review Settings */}
-        {subTab === 'review' && (
-          <div className="max-w-xl bg-[var(--color-paper)] rounded-xl p-6 border border-[var(--color-ink)]/10 space-y-6">
-            <div>
-              <h2 className="font-display text-base font-bold text-[var(--color-ink)]">Review Configuration & Viva Settings</h2>
-              <p className="text-xs text-[var(--color-ink-faint)] mt-1 leading-relaxed">
-                Configure review count limits and enable/disable Viva. All scheduling and marks entry automatically generate active review slots.
-              </p>
-            </div>
-
-            {/* Number of Reviews Control */}
-            <div className="space-y-3">
-              <label className="block text-xs font-semibold text-[var(--color-ink-soft)]">Number of Reviews (Slider & Increments)</label>
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setNumReviews(Math.max(1, numReviews - 1))}
-                  className="h-8 w-8 rounded-full bg-[var(--color-paper-dim)] hover:bg-[var(--color-ink)]/10 text-[var(--color-ink)] flex items-center justify-center font-bold text-sm"
-                >
-                  -
-                </button>
-                <span className="text-2xl font-display font-bold text-[var(--color-seal)] w-6 text-center">{numReviews}</span>
-                <button
-                  type="button"
-                  onClick={() => setNumReviews(Math.min(10, numReviews + 1))}
-                  className="h-8 w-8 rounded-full bg-[var(--color-paper-dim)] hover:bg-[var(--color-ink)]/10 text-[var(--color-ink)] flex items-center justify-center font-bold text-sm"
-                >
-                  +
-                </button>
-                <span className="text-xs font-data text-[var(--color-ink-faint)] ml-2">(min 1, max 10)</span>
-              </div>
-              <input
-                type="range"
-                min={1}
-                max={10}
-                value={numReviews}
-                onChange={(e) => setNumReviews(Number(e.target.value))}
-                className="w-full accent-[var(--color-seal)]"
-              />
-            </div>
-
-            {/* Viva Switch */}
-            <div className="flex items-center justify-between p-4 bg-white rounded-xl border border-[var(--color-ink)]/10">
-              <div>
-                <p className="text-xs font-semibold text-[var(--color-ink)]">Enable / Disable Viva</p>
-                <p className="text-[11px] text-[var(--color-ink-faint)] mt-0.5">When enabled, a Viva slot is appended after reviews.</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setVivaRequired(!vivaRequired)}
-                className={`w-12 h-6 flex items-center rounded-full p-1 transition-colors ${
-                  vivaRequired ? 'bg-[var(--color-seal)]' : 'bg-[var(--color-ink-faint)]/30'
-                }`}
-              >
-                <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${vivaRequired ? 'translate-x-6' : 'translate-x-0'}`} />
-              </button>
-            </div>
-
-            {/* Active Slot Types Preview */}
-            <div className="space-y-2">
-              <p className="text-xs font-semibold text-[var(--color-ink-soft)]">Preview Active Review Slots:</p>
-              <div className="flex flex-wrap gap-2">
-                {Array.from({ length: numReviews }).map((_, i) => (
-                  <span key={i} className="px-3 py-1 rounded-full text-xs font-semibold bg-[var(--color-seal-dim)] text-[var(--color-seal)] border border-[var(--color-seal-soft)]">
-                    Review {i + 1}
-                  </span>
-                ))}
-                {vivaRequired && (
-                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-[var(--color-verdant-soft)] text-[var(--color-verdant)] border border-[var(--color-verdant)]/20">
-                    Viva Session
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <button
-              onClick={handleSaveReviewSettings}
-              className="w-full py-3 rounded-xl text-xs font-semibold bg-[var(--color-seal)] hover:bg-[var(--color-seal)]/90 text-[var(--color-paper)] shadow-sm transition-colors"
-            >
-              Save Review Configuration
-            </button>
-          </div>
-        )}
+          <button onClick={handleSaveReviewSettings} className="w-full py-2.5 rounded-xl text-xs font-semibold bg-[var(--color-seal)] text-[var(--color-paper)] shadow-xs">
+            Save Review Settings
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -592,70 +427,59 @@ function ReviewPanelsTab({ programName }: { programName: string }) {
   const [selectedFaculty, setSelectedFaculty] = useState<string[]>([]);
 
   async function handleCreatePanel() {
-    if (selectedFaculty.length === 0) {
-      toast.error('Select at least one faculty member');
-      return;
-    }
+    if (selectedFaculty.length === 0) return toast.error('Select at least one faculty member');
     try {
-      await upsertPanelMutation.mutateAsync({
-        program: programName,
-        memberIds: selectedFaculty,
-      });
-      toast.success('Review Panel created');
+      await upsertPanelMutation.mutateAsync({ program: programName, memberIds: selectedFaculty, coordinatorId: selectedFaculty[0] });
+      toast.success('Created review panel');
       setShowCreateModal(false);
       setSelectedFaculty([]);
       refetch();
-    } catch (err) {
-      toast.error(apiErrorMessage(err));
+    } catch (e) {
+      toast.error(apiErrorMessage(e));
     }
   }
 
   return (
-    <div className="bg-white rounded-xl border border-[var(--color-ink)]/10 shadow-[var(--shadow-card)] p-8 space-y-6">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="font-display text-2xl font-bold text-[var(--color-ink)]">Review Panel Management</h1>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="px-5 py-2.5 rounded-lg text-xs font-semibold bg-[var(--color-seal)] hover:bg-[var(--color-seal)]/90 text-[var(--color-paper)] shadow-sm transition-colors"
-        >
-          Create New Review Panel
+        <div>
+          <h1 className="font-display text-2xl font-bold text-[var(--color-ink)]">Review Panels — {programName}</h1>
+          <p className="text-xs text-[var(--color-ink-faint)] mt-1">Manage panel structures and faculty assignments for project evaluations.</p>
+        </div>
+        <button onClick={() => setShowCreateModal(true)} className="px-4 py-2 rounded-xl text-xs font-semibold bg-[var(--color-seal)] text-[var(--color-paper)] flex items-center gap-2 shadow-sm">
+          <Plus size={15} /> Create Panel
         </button>
       </div>
 
-      <div className="border border-[var(--color-ink)]/10 rounded-xl overflow-hidden">
-        <div className="bg-[var(--color-paper-dim)] px-5 py-3 border-b border-[var(--color-ink)]/10">
-          <h2 className="text-xs font-bold text-[var(--color-ink)] uppercase tracking-wide">Programme-wise Panels ({programName})</h2>
-        </div>
-
-        {panels?.length === 0 ? (
-          <div className="p-12 text-center text-xs text-[var(--color-ink-faint)]">
-            No review panels created yet for {programName}. Click "Create New Review Panel" to get started.
-          </div>
-        ) : (
-          <div className="divide-y divide-[var(--color-ink)]/8">
-            {panels?.map((panel, idx) => (
-              <div key={panel._id} className="p-5 flex items-center justify-between hover:bg-[var(--color-paper-dim)]/50">
-                <div>
-                  <h3 className="font-display text-sm font-bold text-[var(--color-ink)]">Panel #{idx + 1}</h3>
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {panel.memberIds.map((m) => (
-                      <span key={m._id} className="px-2.5 py-1 rounded bg-[var(--color-paper-dim)] text-[var(--color-ink)] text-[11px] font-medium border border-[var(--color-ink)]/8">
-                        {m.name}
-                      </span>
-                    ))}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {panels?.map((panel, idx) => (
+          <div key={panel._id} className="bg-white rounded-xl border border-[var(--color-ink)]/10 shadow-[var(--shadow-card)] p-5 space-y-3">
+            <div className="flex items-center justify-between border-b border-[var(--color-ink)]/10 pb-2">
+              <span className="font-display font-bold text-sm text-[var(--color-ink)]">Panel #{idx + 1}</span>
+              <span className="text-[10px] font-data font-bold px-2 py-0.5 rounded bg-[var(--color-seal-dim)] text-[var(--color-seal)]">
+                {panel.teamIds.length} Teams
+              </span>
+            </div>
+            <div className="space-y-1 text-xs">
+              <p className="font-semibold text-[var(--color-ink-soft)]">Coordinator: {panel.coordinatorId?.name ?? 'Unassigned'}</p>
+              <div className="pt-2 space-y-1">
+                <p className="text-[11px] font-bold text-[var(--color-ink-faint)] uppercase">Members ({panel.memberIds.length})</p>
+                {panel.memberIds.map((m) => (
+                  <div key={m._id} className="px-2.5 py-1 rounded bg-[var(--color-paper)] text-[var(--color-ink)] font-medium">
+                    {m.name}
                   </div>
-                </div>
+                ))}
               </div>
-            ))}
+            </div>
           </div>
-        )}
+        ))}
       </div>
 
       {showCreateModal && (
         <div className="fixed inset-0 bg-[var(--color-ink)]/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl max-w-md w-full p-6 space-y-4 shadow-[var(--shadow-raised)] border border-[var(--color-ink)]/10">
             <h3 className="font-display text-lg font-bold text-[var(--color-ink)]">Create New Review Panel</h3>
-            <p className="text-xs text-[var(--color-ink-faint)]">Select faculty members to include in this review panel (max 4).</p>
+            <p className="text-xs text-[var(--color-ink-faint)]">Select faculty members (max 4). First selected member becomes Coordinator.</p>
 
             <div className="max-h-60 overflow-y-auto space-y-1.5 border border-[var(--color-ink)]/10 p-2 rounded-lg">
               {faculty?.items.map((f) => (
@@ -665,10 +489,7 @@ function ReviewPanelsTab({ programName }: { programName: string }) {
                     checked={selectedFaculty.includes(f._id)}
                     onChange={(e) => {
                       if (e.target.checked) {
-                        if (selectedFaculty.length >= 4) {
-                          toast.error('Maximum 4 members allowed');
-                          return;
-                        }
+                        if (selectedFaculty.length >= 4) return toast.error('Maximum 4 members allowed');
                         setSelectedFaculty([...selectedFaculty, f._id]);
                       } else {
                         setSelectedFaculty(selectedFaculty.filter((id) => id !== f._id));
@@ -676,7 +497,6 @@ function ReviewPanelsTab({ programName }: { programName: string }) {
                     }}
                   />
                   <span className="font-medium text-[var(--color-ink)]">{f.name}</span>
-                  <span className="text-[var(--color-ink-faint)] text-[10px]">({f.designation})</span>
                 </label>
               ))}
             </div>
@@ -697,60 +517,949 @@ function ReviewPanelsTab({ programName }: { programName: string }) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* TAB 4-7: SUB-PANEL MODULES                                                 */
+/* TAB 4: TEAM PANEL ALLOCATIONS                                              */
 /* -------------------------------------------------------------------------- */
-function TeamPanelAllocationsTab({ programName }: { programName: string }) {
+function TeamPanelAllocationsTab({ programId, programName }: { programId: string; programName: string }) {
+  const { data: rows, refetch } = useAllocationTable(programId);
+  const autoAssignGuidesMutation = useAutoAssign();
+  const autoAssignPanelsMutation = useAutoAssignPanels();
+  const deleteUnassignedMutation = useDeleteUnassignedTeams();
+  const deleteSoloMutation = useDeleteSoloTeams();
+
+  const totalTeams = rows?.length ?? 0;
+  const fullyAllocated = rows?.filter((r) => r.guide && r.panel).length ?? 0;
+  const pendingGuide = rows?.filter((r) => !r.guide).length ?? 0;
+  const pendingPanel = rows?.filter((r) => !r.panel).length ?? 0;
+  const allocatedPct = totalTeams > 0 ? Math.round((fullyAllocated / totalTeams) * 100) : 0;
+
+  async function handleAutoAssignGuides() {
+    try {
+      const res = await autoAssignGuidesMutation.mutateAsync(programId);
+      toast.success(`Assigned ${res.assignedCount} teams to guides`);
+      refetch();
+    } catch (e) {
+      toast.error(apiErrorMessage(e));
+    }
+  }
+
+  async function handleAutoAssignPanels() {
+    try {
+      const res = await autoAssignPanelsMutation.mutateAsync(programId);
+      toast.success(`Assigned ${res.assignedCount} teams to review panels`);
+      refetch();
+    } catch (e) {
+      toast.error(apiErrorMessage(e));
+    }
+  }
+
+  async function handleDeleteUnassigned() {
+    if (!confirm('Delete all teams without an assigned guide?')) return;
+    try {
+      const res = await deleteUnassignedMutation.mutateAsync(programId);
+      toast.success(`Deleted ${res.deletedCount} unassigned teams`);
+      refetch();
+    } catch (e) {
+      toast.error(apiErrorMessage(e));
+    }
+  }
+
+  async function handleDeleteSolo() {
+    if (!confirm('Delete all single-member (solo) teams?')) return;
+    try {
+      const res = await deleteSoloMutation.mutateAsync(programId);
+      toast.success(`Deleted ${res.deletedCount} solo teams`);
+      refetch();
+    } catch (e) {
+      toast.error(apiErrorMessage(e));
+    }
+  }
+
   return (
-    <div className="bg-white rounded-xl border border-[var(--color-ink)]/10 shadow-[var(--shadow-card)] p-8 space-y-6">
-      <div>
-        <h1 className="font-display text-2xl font-bold text-[var(--color-ink)]">Team Panel Allocation — {programName}</h1>
-        <p className="text-xs text-[var(--color-ink-faint)] mt-1">Programme-wise panel allocation to student teams.</p>
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="font-display text-2xl font-bold text-[var(--color-ink)]">Team Panel Allocations — {programName}</h1>
+          <p className="text-xs text-[var(--color-ink-faint)] mt-1">Auto-assign guides and review panels without conflicts of interest.</p>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={handleAutoAssignGuides} className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-[var(--color-seal)] text-[var(--color-paper)] hover:bg-[var(--color-seal)]/90 transition-colors flex items-center gap-1.5 shadow-xs">
+            <Wand2 size={14} /> Auto-Assign Guides
+          </button>
+          <button onClick={handleAutoAssignPanels} className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-[var(--color-verdant)] text-white hover:bg-[var(--color-verdant)]/90 transition-colors flex items-center gap-1.5 shadow-xs">
+            <Wand2 size={14} /> Auto-Assign Panels
+          </button>
+          <button onClick={handleDeleteUnassigned} className="px-3 py-2 rounded-xl text-xs font-semibold bg-[var(--color-flag-soft)] text-[var(--color-flag)] hover:bg-[var(--color-flag)] hover:text-white transition-colors flex items-center gap-1">
+            <Trash2 size={14} /> Clear Unassigned
+          </button>
+          <button onClick={handleDeleteSolo} className="px-3 py-2 rounded-xl text-xs font-semibold bg-[var(--color-paper-dim)] text-[var(--color-ink-soft)] hover:bg-[var(--color-ink)]/10 transition-colors flex items-center gap-1">
+            <Trash2 size={14} /> Clear Solo
+          </button>
+        </div>
       </div>
-      <div className="p-8 text-center text-xs text-[var(--color-ink-faint)] border border-dashed border-[var(--color-ink)]/20 rounded-xl">
-        Select a review panel and manage panel assignments for student teams in {programName}.
+
+      {/* Analytics Graph & Metrics Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-white p-5 rounded-xl border border-[var(--color-ink)]/10 shadow-[var(--shadow-card)] space-y-2">
+          <span className="text-[11px] font-bold text-[var(--color-ink-faint)] uppercase tracking-wider">Total Teams</span>
+          <p className="text-2xl font-display font-bold text-[var(--color-ink)]">{totalTeams}</p>
+        </div>
+        <div className="bg-white p-5 rounded-xl border border-[var(--color-ink)]/10 shadow-[var(--shadow-card)] space-y-2">
+          <span className="text-[11px] font-bold text-[var(--color-verdant)] uppercase tracking-wider">Fully Allocated</span>
+          <p className="text-2xl font-display font-bold text-[var(--color-verdant)]">{fullyAllocated}</p>
+        </div>
+        <div className="bg-white p-5 rounded-xl border border-[var(--color-ink)]/10 shadow-[var(--shadow-card)] space-y-2">
+          <span className="text-[11px] font-bold text-[var(--color-seal)] uppercase tracking-wider">Pending Guide</span>
+          <p className="text-2xl font-display font-bold text-[var(--color-seal)]">{pendingGuide}</p>
+        </div>
+        <div className="bg-white p-5 rounded-xl border border-[var(--color-ink)]/10 shadow-[var(--shadow-card)] space-y-2">
+          <span className="text-[11px] font-bold text-[var(--color-flag)] uppercase tracking-wider">Pending Panel</span>
+          <p className="text-2xl font-display font-bold text-[var(--color-flag)]">{pendingPanel}</p>
+        </div>
+      </div>
+
+      {/* Allocation Progress Graph */}
+      <div className="bg-white p-6 rounded-xl border border-[var(--color-ink)]/10 shadow-[var(--shadow-card)] space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-bold text-[var(--color-ink)] uppercase tracking-wider flex items-center gap-2">
+            <BarChart2 size={16} className="text-[var(--color-seal)]" /> Allocation Coverage Graph
+          </span>
+          <span className="text-xs font-bold text-[var(--color-seal)] font-data">{allocatedPct}% Completed</span>
+        </div>
+        <div className="w-full h-4 bg-[var(--color-paper-dim)] rounded-full overflow-hidden flex">
+          <div className="bg-[var(--color-verdant)] transition-all duration-500" style={{ width: `${allocatedPct}%` }} title={`Allocated: ${fullyAllocated}`} />
+          <div className="bg-[var(--color-seal)] transition-all duration-500" style={{ width: `${totalTeams > 0 ? ((pendingGuide) / totalTeams) * 100 : 0}%` }} title={`Pending Guide: ${pendingGuide}`} />
+          <div className="bg-[var(--color-flag)] transition-all duration-500" style={{ width: `${totalTeams > 0 ? ((pendingPanel) / totalTeams) * 100 : 0}%` }} title={`Pending Panel: ${pendingPanel}`} />
+        </div>
+        <div className="flex items-center gap-4 text-[11px] text-[var(--color-ink-faint)] pt-1">
+          <span className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-[var(--color-verdant)]" /> Fully Allocated ({fullyAllocated})</span>
+          <span className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-[var(--color-seal)]" /> Needs Guide ({pendingGuide})</span>
+          <span className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-[var(--color-flag)]" /> Needs Panel ({pendingPanel})</span>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl border border-[var(--color-ink)]/10 shadow-[var(--shadow-card)] overflow-hidden">
+        <div className="p-4 border-b border-[var(--color-ink)]/10 bg-[var(--color-paper)]/50 flex items-center justify-between">
+          <span className="text-xs font-bold text-[var(--color-ink-soft)] uppercase tracking-wider">Allocations Summary ({rows?.length ?? 0} Teams)</span>
+        </div>
+
+        {rows?.length === 0 ? (
+          <div className="p-12 text-center text-xs text-[var(--color-ink-faint)] font-medium">No teams registered for {programName}.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-[var(--color-ink)]/10 bg-[var(--color-paper)]/30 font-semibold text-[var(--color-ink-soft)]">
+                  <th className="p-3.5 pl-6">Team Name</th>
+                  <th className="p-3.5">Assigned Guide</th>
+                  <th className="p-3.5">Assigned Panel</th>
+                  <th className="p-3.5 pr-6">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--color-ink)]/5">
+                {rows?.map((row) => (
+                  <tr key={row.teamId} className="hover:bg-[var(--color-paper-dim)]/50 transition-colors">
+                    <td className="p-3.5 pl-6 font-display font-bold text-[var(--color-ink)]">{row.teamName}</td>
+                    <td className="p-3.5 font-medium text-[var(--color-ink)]">{row.guide?.name ?? <span className="text-[var(--color-flag)] font-bold">Unassigned</span>}</td>
+                    <td className="p-3.5 font-medium text-[var(--color-ink)]">{row.panel ? `Panel (Coord: ${row.panel.coordinatorId?.name ?? 'N/A'})` : <span className="text-[var(--color-flag)] font-bold">Unassigned</span>}</td>
+                    <td className="p-3.5 pr-6">
+                      {row.guide && row.panel ? (
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[var(--color-verdant-soft)] text-[var(--color-verdant)]">Allocated</span>
+                      ) : (
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[var(--color-seal-dim)] text-[var(--color-seal)]">Pending</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
+/* -------------------------------------------------------------------------- */
+/* TAB 5: INSTRUCTION TEMPLATES                                               */
+/* -------------------------------------------------------------------------- */
+function InstructionsTab({ programName }: { programName: string }) {
+  const { data: instructions, refetch } = useInstructions(programName);
+  const createMutation = useCreateInstruction();
+  const deleteMutation = useDeleteInstruction();
+  const [showModal, setShowModal] = useState(false);
+  const [title, setTitle] = useState('');
+  const [text, setText] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+
+  async function handleCreate() {
+    if (!title) return toast.error('Instruction title is required');
+    try {
+      const formData = new FormData();
+      formData.append('program', programName);
+      formData.append('title', title);
+      formData.append('instructions', text);
+      if (file) formData.append('file', file);
+
+      await createMutation.mutateAsync(formData);
+      toast.success('Instruction template published');
+      setShowModal(false);
+      setTitle('');
+      setText('');
+      setFile(null);
+      refetch();
+    } catch (e) {
+      toast.error(apiErrorMessage(e));
+    }
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm('Delete this instruction template?')) return;
+    try {
+      await deleteMutation.mutateAsync(id);
+      toast.success('Deleted instruction template');
+      refetch();
+    } catch (e) {
+      toast.error(apiErrorMessage(e));
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="font-display text-2xl font-bold text-[var(--color-ink)]">Instruction Templates — {programName}</h1>
+          <p className="text-xs text-[var(--color-ink-faint)] mt-1">Publish review instructions and reference documents for students.</p>
+        </div>
+        <button onClick={() => setShowModal(true)} className="px-4 py-2 rounded-xl text-xs font-semibold bg-[var(--color-seal)] text-[var(--color-paper)] flex items-center gap-2 shadow-sm">
+          <Plus size={15} /> Publish Template
+        </button>
+      </div>
+
+      <div className="space-y-3">
+        {instructions?.length === 0 ? (
+          <div className="bg-white rounded-xl border border-[var(--color-ink)]/10 p-12 text-center text-xs text-[var(--color-ink-faint)] font-medium">
+            No instruction templates published for {programName} yet.
+          </div>
+        ) : (
+          instructions?.map((inst) => (
+            <div key={inst._id} className="bg-white rounded-xl border border-[var(--color-ink)]/10 shadow-[var(--shadow-card)] p-5 flex items-center justify-between">
+              <div className="space-y-1">
+                <h3 className="font-display text-base font-bold text-[var(--color-ink)]">{inst.title}</h3>
+                <p className="text-xs text-[var(--color-ink-soft)] leading-relaxed">{inst.instructions || 'No textual instructions attached.'}</p>
+                {inst.fileName && (
+                  <a href={`/api/instructions/${inst._id}/download`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--color-seal)] hover:underline pt-1">
+                    <Download size={13} /> {inst.fileName}
+                  </a>
+                )}
+              </div>
+              <button onClick={() => handleDelete(inst._id)} className="p-2 text-[var(--color-flag)] hover:bg-[var(--color-flag-soft)] rounded-lg transition-colors">
+                <Trash2 size={16} />
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+
+      {showModal && (
+        <div className="fixed inset-0 bg-[var(--color-ink)]/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 space-y-4 shadow-[var(--shadow-raised)] border border-[var(--color-ink)]/10">
+            <h3 className="font-display text-lg font-bold text-[var(--color-ink)]">Publish Instruction Template</h3>
+            <div className="space-y-3">
+              <input type="text" placeholder="Template Title (e.g. Review 1 Guidelines)" value={title} onChange={(e) => setTitle(e.target.value)} className="w-full px-3 py-2 border border-[var(--color-ink)]/15 rounded-lg text-xs" />
+              <textarea placeholder="Instruction text / rubric breakdown..." value={text} onChange={(e) => setText(e.target.value)} rows={4} className="w-full px-3 py-2 border border-[var(--color-ink)]/15 rounded-lg text-xs" />
+              <input type="file" onChange={(e) => setFile(e.target.files?.[0] || null)} className="text-xs text-[var(--color-ink-faint)]" />
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button onClick={() => setShowModal(false)} className="px-4 py-2 rounded-lg text-xs font-semibold bg-[var(--color-paper-dim)] text-[var(--color-ink)]">Cancel</button>
+              <button onClick={handleCreate} className="px-4 py-2 rounded-lg text-xs font-semibold bg-[var(--color-seal)] text-[var(--color-paper)]">Publish</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* TAB 6: OFFICIAL LETTERS & SIGNATURES                                       */
+/* -------------------------------------------------------------------------- */
+function OfficialLettersTab({ programId, programName }: { programId: string; programName: string }) {
+  const { data: templates } = useLetterTemplates();
+  const { data: signatures, refetch: refetchSigs } = useSignatures();
+  const createSigMutation = useCreateSignature();
+  const deleteSigMutation = useDeleteSignature();
+
+  const [selectedTemplate, setSelectedTemplate] = useState('viva_letter');
+  const [teamId, setTeamId] = useState('');
+  const [reviewDate, setReviewDate] = useState(new Date().toLocaleDateString('en-IN'));
+
+  const { data: previewData } = usePreviewLetter(selectedTemplate, teamId, reviewDate);
+  const { data: teams } = useAllocationTable(programId);
+
+  const [sigLabel, setSigLabel] = useState('');
+  const [sigBase64, setSigBase64] = useState('');
+
+  async function handleAddSignature() {
+    if (!sigLabel || !sigBase64) return toast.error('Signature label and image file are required');
+    try {
+      await createSigMutation.mutateAsync({ label: sigLabel, imageBase64: sigBase64 });
+      toast.success('Signature uploaded');
+      setSigLabel('');
+      setSigBase64('');
+      refetchSigs();
+    } catch (e) {
+      toast.error(apiErrorMessage(e));
+    }
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setSigBase64(reader.result as string);
+    reader.readAsDataURL(file);
+  }
+
+  async function handleDeleteSig(id: string) {
+    try {
+      await deleteSigMutation.mutateAsync(id);
+      toast.success('Deleted signature');
+      refetchSigs();
+    } catch (e) {
+      toast.error(apiErrorMessage(e));
+    }
+  }
+
+  function handleDownloadLetter() {
+    if (!teamId) return toast.error('Select a team to generate letter');
+    window.open(`/api/documents/generate/${selectedTemplate}?teamId=${teamId}&reviewDate=${encodeURIComponent(reviewDate)}`, '_blank');
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="font-display text-2xl font-bold text-[var(--color-ink)]">Official Letters & Signatures — {programName}</h1>
+        <p className="text-xs text-[var(--color-ink-faint)] mt-1">Generate examiner claim letters, viva appointment forms, and manage digital signatures.</p>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Letter Generator */}
+        <div className="lg:col-span-2 bg-white rounded-xl border border-[var(--color-ink)]/10 shadow-[var(--shadow-card)] p-6 space-y-4">
+          <h2 className="font-display text-base font-bold text-[var(--color-ink)]">Letter Generator</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-[var(--color-ink-soft)] mb-1">Letter Type</label>
+              <select value={selectedTemplate} onChange={(e) => setSelectedTemplate(e.target.value)} className="w-full px-3 py-2 rounded-lg border border-[var(--color-ink)]/15 text-xs">
+                {templates?.map((t) => (
+                  <option key={t.id} value={t.id}>{t.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-[var(--color-ink-soft)] mb-1">Target Team</label>
+              <select value={teamId} onChange={(e) => setTeamId(e.target.value)} className="w-full px-3 py-2 rounded-lg border border-[var(--color-ink)]/15 text-xs">
+                <option value="">Select Team...</option>
+                {teams?.map((t) => (
+                  <option key={t.teamId} value={t.teamId}>{t.teamName}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-[var(--color-ink-soft)] mb-1">Date</label>
+              <input type="text" value={reviewDate} onChange={(e) => setReviewDate(e.target.value)} className="w-full px-3 py-2 rounded-lg border border-[var(--color-ink)]/15 text-xs font-data" />
+            </div>
+          </div>
+
+          {previewData && (
+            <div className="space-y-2 pt-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-seal)]">Live Text Preview:</span>
+              <pre className="p-4 rounded-lg bg-[var(--color-paper)] border border-[var(--color-ink)]/10 text-xs font-data whitespace-pre-wrap max-h-72 overflow-y-auto leading-relaxed">
+                {previewData.preview}
+              </pre>
+            </div>
+          )}
+
+          <button onClick={handleDownloadLetter} className="w-full py-2.5 rounded-xl text-xs font-semibold bg-[var(--color-seal)] text-[var(--color-paper)] shadow-xs flex items-center justify-center gap-2">
+            <Download size={14} /> Download Generated Letter
+          </button>
+        </div>
+
+        {/* Digital Signatures Manager */}
+        <div className="bg-white rounded-xl border border-[var(--color-ink)]/10 shadow-[var(--shadow-card)] p-6 space-y-4">
+          <h2 className="font-display text-base font-bold text-[var(--color-ink)]">Digital Signatures</h2>
+          <div className="space-y-3 border-b border-[var(--color-ink)]/10 pb-4">
+            <input type="text" placeholder="Signature Label (e.g. HOD Signature)" value={sigLabel} onChange={(e) => setSigLabel(e.target.value)} className="w-full px-3 py-2 rounded-lg border border-[var(--color-ink)]/15 text-xs" />
+            <input type="file" accept="image/*" onChange={handleFileChange} className="text-xs text-[var(--color-ink-faint)]" />
+            <button onClick={handleAddSignature} className="w-full py-2 rounded-lg text-xs font-semibold bg-[var(--color-ink)] text-[var(--color-paper)]">
+              Upload Signature
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            {signatures?.map((sig) => (
+              <div key={sig._id} className="p-3 rounded-lg border border-[var(--color-ink)]/10 bg-[var(--color-paper)]/50 flex items-center justify-between">
+                <div>
+                  <p className="font-semibold text-xs text-[var(--color-ink)]">{sig.label}</p>
+                  <img src={sig.imageBase64} alt={sig.label} className="h-8 object-contain mt-1" />
+                </div>
+                <button onClick={() => handleDeleteSig(sig._id)} className="p-1.5 text-[var(--color-flag)] hover:bg-[var(--color-flag-soft)] rounded">
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* TAB 7: FINAL REPORTS & AUDITS                                              */
+/* -------------------------------------------------------------------------- */
+function FinalReportsTab({ programName }: { programName: string }) {
+  const { data: reports, refetch } = useReports();
+  const approveMutation = useApproveReport();
+  const rejectMutation = useRejectReport();
+
+  const [rejectModalId, setRejectModalId] = useState<string | null>(null);
+  const [remarks, setRemarks] = useState('');
+
+  async function handleApprove(id: string) {
+    try {
+      await approveMutation.mutateAsync(id);
+      toast.success('Approved report');
+      refetch();
+    } catch (e) {
+      toast.error(apiErrorMessage(e));
+    }
+  }
+
+  async function handleReject() {
+    if (!rejectModalId) return;
+    try {
+      await rejectMutation.mutateAsync({ id: rejectModalId, remarks });
+      toast.success('Rejected report with remarks');
+      setRejectModalId(null);
+      setRemarks('');
+      refetch();
+    } catch (e) {
+      toast.error(apiErrorMessage(e));
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="font-display text-2xl font-bold text-[var(--color-ink)]">Final Reports & Rejection Audits — {programName}</h1>
+        <p className="text-xs text-[var(--color-ink-faint)] mt-1">Review student final PDF reports, approve, or reject with multi-turn audit history.</p>
+      </div>
+
+      <div className="bg-white rounded-xl border border-[var(--color-ink)]/10 shadow-[var(--shadow-card)] overflow-hidden">
+        <div className="p-4 border-b border-[var(--color-ink)]/10 bg-[var(--color-paper)]/50 flex items-center justify-between">
+          <span className="text-xs font-bold text-[var(--color-ink-soft)] uppercase tracking-wider">Submitted Final Reports ({reports?.length ?? 0})</span>
+        </div>
+
+        {reports?.length === 0 ? (
+          <div className="p-12 text-center text-xs text-[var(--color-ink-faint)] font-medium">No reports uploaded yet.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-[var(--color-ink)]/10 bg-[var(--color-paper)]/30 font-semibold text-[var(--color-ink-soft)]">
+                  <th className="p-3.5 pl-6">Team</th>
+                  <th className="p-3.5">Uploaded By</th>
+                  <th className="p-3.5">Filename</th>
+                  <th className="p-3.5">Status</th>
+                  <th className="p-3.5 pr-6 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--color-ink)]/5">
+                {reports?.map((r) => (
+                  <tr key={r._id} className="hover:bg-[var(--color-paper-dim)]/50 transition-colors">
+                    <td className="p-3.5 pl-6 font-display font-bold text-[var(--color-ink)]">{r.teamId?.name ?? 'N/A'}</td>
+                    <td className="p-3.5 font-medium text-[var(--color-ink)]">{r.uploadedBy?.name ?? 'Student'}</td>
+                    <td className="p-3.5 text-[var(--color-ink-faint)] font-data">{r.filename}</td>
+                    <td className="p-3.5">
+                      {r.status === 'approved' && <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[var(--color-verdant-soft)] text-[var(--color-verdant)]">Approved</span>}
+                      {r.status === 'rejected' && <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[var(--color-flag-soft)] text-[var(--color-flag)]">Rejected ({r.rejections?.length ?? 1}x)</span>}
+                      {r.status === 'uploaded' && <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[var(--color-seal-dim)] text-[var(--color-seal)]">Uploaded</span>}
+                    </td>
+                    <td className="p-3.5 pr-6 text-right space-x-1">
+                      <a href={`/api/reports/${r._id}/download`} target="_blank" rel="noreferrer" className="px-2.5 py-1 rounded bg-[var(--color-paper-dim)] text-[var(--color-ink)] font-semibold inline-flex items-center gap-1">
+                        <Eye size={12} /> Download
+                      </a>
+                      {r.status !== 'approved' && (
+                        <button onClick={() => handleApprove(r._id)} className="px-2.5 py-1 rounded bg-[var(--color-verdant)] text-white font-semibold">
+                          Approve
+                        </button>
+                      )}
+                      {r.status !== 'rejected' && (
+                        <button onClick={() => setRejectModalId(r._id)} className="px-2.5 py-1 rounded bg-[var(--color-flag)] text-white font-semibold">
+                          Reject
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {rejectModalId && (
+        <div className="fixed inset-0 bg-[var(--color-ink)]/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 space-y-4 shadow-[var(--shadow-raised)] border border-[var(--color-ink)]/10">
+            <h3 className="font-display text-lg font-bold text-[var(--color-ink)]">Reject Final Report</h3>
+            <textarea placeholder="Reason for rejection / required revisions..." value={remarks} onChange={(e) => setRemarks(e.target.value)} rows={4} className="w-full px-3 py-2 border border-[var(--color-ink)]/15 rounded-lg text-xs" />
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button onClick={() => setRejectModalId(null)} className="px-4 py-2 rounded-lg text-xs font-semibold bg-[var(--color-paper-dim)] text-[var(--color-ink)]">Cancel</button>
+              <button onClick={handleReject} className="px-4 py-2 rounded-lg text-xs font-semibold bg-[var(--color-flag)] text-white">Confirm Rejection</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* TAB 8: REVIEW ATTENDANCE                                                   */
+/* -------------------------------------------------------------------------- */
 function ReviewAttendanceTab({ programName }: { programName: string }) {
+  const { data: records, isLoading } = useProgramAttendance(programName, 'review');
+  const [filterKind, setFilterKind] = useState<string>('all');
+
+  async function handleExport() {
+    try {
+      const res = await downloadAttendance({ program: programName, kind: 'review' });
+      triggerDownload(res.data, `review-attendance-${programName.toLowerCase()}.xlsx`);
+      toast.success('Downloaded Review Attendance Excel sheet');
+    } catch (e) {
+      toast.error(apiErrorMessage(e));
+    }
+  }
+
+  const filteredRecords = records?.filter((r) => {
+    if (filterKind === 'all') return true;
+    return r.kind === filterKind;
+  }) ?? [];
+
+  const totalSessions = records?.length ?? 0;
+  let totalStudentsEvaluated = 0;
+  let totalPresentCount = 0;
+
+  records?.forEach((rec) => {
+    rec.perStudent?.forEach((st: any) => {
+      totalStudentsEvaluated++;
+      if (st.present) totalPresentCount++;
+    });
+  });
+
+  const overallAttendanceRate = totalStudentsEvaluated > 0 ? Math.round((totalPresentCount / totalStudentsEvaluated) * 100) : 0;
+
   return (
-    <div className="bg-white rounded-xl border border-[var(--color-ink)]/10 shadow-[var(--shadow-card)] p-8 space-y-6">
-      <div>
-        <h1 className="font-display text-2xl font-bold text-[var(--color-ink)]">Review Attendance — {programName}</h1>
-        <p className="text-xs text-[var(--color-ink-faint)] mt-1">Faculty attendance tracking during project reviews.</p>
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="font-display text-2xl font-bold text-[var(--color-ink)]">Review Attendance — {programName}</h1>
+          <p className="text-xs text-[var(--color-ink-faint)] mt-1">Faculty & team review evaluation attendance tracking across review rounds.</p>
+        </div>
+
+        <button onClick={handleExport} className="px-4 py-2 rounded-xl text-xs font-semibold bg-[var(--color-verdant)] text-white hover:bg-[var(--color-verdant)]/90 transition-colors flex items-center gap-2 shadow-xs">
+          <Download size={14} /> Export Excel
+        </button>
       </div>
-      <div className="p-8 text-center text-xs text-[var(--color-ink-faint)] border border-dashed border-[var(--color-ink)]/20 rounded-xl">
-        Faculty review attendance records for {programName}.
+
+      {/* Visual Stats Graph Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-white p-5 rounded-xl border border-[var(--color-ink)]/10 shadow-[var(--shadow-card)] space-y-2">
+          <span className="text-[11px] font-bold text-[var(--color-ink-faint)] uppercase tracking-wider">Recorded Sessions</span>
+          <p className="text-2xl font-display font-bold text-[var(--color-ink)]">{totalSessions}</p>
+        </div>
+        <div className="bg-white p-5 rounded-xl border border-[var(--color-ink)]/10 shadow-[var(--shadow-card)] space-y-2">
+          <span className="text-[11px] font-bold text-[var(--color-verdant)] uppercase tracking-wider">Total Present Marks</span>
+          <p className="text-2xl font-display font-bold text-[var(--color-verdant)]">{totalPresentCount} / {totalStudentsEvaluated}</p>
+        </div>
+        <div className="bg-white p-5 rounded-xl border border-[var(--color-ink)]/10 shadow-[var(--shadow-card)] space-y-2">
+          <span className="text-[11px] font-bold text-[var(--color-seal)] uppercase tracking-wider">Overall Attendance Rate</span>
+          <div className="flex items-center gap-3">
+            <span className="text-2xl font-display font-bold text-[var(--color-seal)] font-data">{overallAttendanceRate}%</span>
+            <div className="flex-1 h-2 bg-[var(--color-paper-dim)] rounded-full overflow-hidden">
+              <div className="h-full bg-[var(--color-seal)] transition-all duration-500" style={{ width: `${overallAttendanceRate}%` }} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Table */}
+      <div className="bg-white rounded-xl border border-[var(--color-ink)]/10 shadow-[var(--shadow-card)] overflow-hidden">
+        <div className="p-4 border-b border-[var(--color-ink)]/10 bg-[var(--color-paper)]/50 flex items-center justify-between">
+          <span className="text-xs font-bold text-[var(--color-ink-soft)] uppercase tracking-wider">Attendance Logs ({filteredRecords.length})</span>
+          <div className="flex items-center gap-2">
+            <Filter size={14} className="text-[var(--color-ink-faint)]" />
+            <select value={filterKind} onChange={(e) => setFilterKind(e.target.value)} className="px-2.5 py-1 rounded border border-[var(--color-ink)]/15 text-xs">
+              <option value="all">All Types</option>
+              <option value="review">Review Sessions</option>
+              <option value="semester">Semester Sessions</option>
+            </select>
+          </div>
+        </div>
+
+        {isLoading ? (
+          <div className="p-8 text-center text-xs text-[var(--color-ink-faint)]">Loading attendance logs...</div>
+        ) : filteredRecords.length === 0 ? (
+          <div className="p-12 text-center text-xs text-[var(--color-ink-faint)] font-medium">No review attendance recorded yet for {programName}.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-[var(--color-ink)]/10 bg-[var(--color-paper)]/30 font-semibold text-[var(--color-ink-soft)]">
+                  <th className="p-3.5 pl-6">Team</th>
+                  <th className="p-3.5">Date & Time</th>
+                  <th className="p-3.5">Session Kind</th>
+                  <th className="p-3.5">Present / Total</th>
+                  <th className="p-3.5 pr-6 text-right">Student Breakdown</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--color-ink)]/5">
+                {filteredRecords.map((rec) => {
+                  const presentCount = rec.perStudent?.filter((s: any) => s.present).length ?? 0;
+                  const totalCount = rec.perStudent?.length ?? 0;
+                  return (
+                    <tr key={rec._id} className="hover:bg-[var(--color-paper-dim)]/50 transition-colors">
+                      <td className="p-3.5 pl-6 font-display font-bold text-[var(--color-ink)]">{rec.teamId?.name ?? 'Team'}</td>
+                      <td className="p-3.5 text-[var(--color-ink-faint)] font-data">
+                        {rec.reviewDate ? new Date(rec.reviewDate).toLocaleDateString() : 'N/A'} {rec.reviewTime ? `@ ${rec.reviewTime}` : ''}
+                      </td>
+                      <td className="p-3.5 uppercase text-[10px] font-bold tracking-wider text-[var(--color-seal)]">{rec.kind}</td>
+                      <td className="p-3.5 font-bold font-data text-[var(--color-ink)]">{presentCount} / {totalCount}</td>
+                      <td className="p-3.5 pr-6 text-right">
+                        <div className="flex flex-wrap gap-1 justify-end">
+                          {rec.perStudent?.map((s: any, idx: number) => (
+                            <span key={idx} className={`px-2 py-0.5 rounded text-[10px] font-semibold ${s.present ? 'bg-[var(--color-verdant-soft)] text-[var(--color-verdant)]' : 'bg-[var(--color-flag-soft)] text-[var(--color-flag)]'}`}>
+                              {s.studentId?.name ?? 'Student'}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function StudentAttendanceTab({ programName }: { programName: string }) {
+/* -------------------------------------------------------------------------- */
+/* TAB 9: STUDENT ATTENDANCE                                                  */
+/* -------------------------------------------------------------------------- */
+function StudentAttendanceTab({ programId, programName }: { programId: string; programName: string }) {
+  const { data: studentsData } = useStudentList(programId);
+  const { data: attendanceData } = useProgramAttendance(programName);
+
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const students = studentsData?.items ?? [];
+
+  // Build per-student aggregate attendance map
+  const studentStats = students.map((st) => {
+    let presentSessions = 0;
+    let totalSessions = 0;
+
+    attendanceData?.forEach((rec) => {
+      const entry = rec.perStudent?.find((ps: any) => ps.studentId?._id === st._id || ps.studentId === st._id);
+      if (entry) {
+        totalSessions++;
+        if (entry.present) presentSessions++;
+      }
+    });
+
+    const ratePct = totalSessions > 0 ? Math.round((presentSessions / totalSessions) * 100) : 100;
+    return {
+      ...st,
+      presentSessions,
+      totalSessions,
+      ratePct,
+    };
+  });
+
+  const filteredStudents = studentStats.filter(
+    (st) =>
+      st.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      st.regNo.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  async function handleExport() {
+    try {
+      const res = await downloadAttendance({ program: programName });
+      triggerDownload(res.data, `student-attendance-${programName.toLowerCase()}.xlsx`);
+      toast.success('Downloaded Student Attendance Excel sheet');
+    } catch (e) {
+      toast.error(apiErrorMessage(e));
+    }
+  }
+
+  const avgAttendance = studentStats.length > 0 ? Math.round(studentStats.reduce((s, x) => s + x.ratePct, 0) / studentStats.length) : 100;
+
   return (
-    <div className="bg-white rounded-xl border border-[var(--color-ink)]/10 shadow-[var(--shadow-card)] p-8 space-y-6">
-      <div>
-        <h1 className="font-display text-2xl font-bold text-[var(--color-ink)]">Student Attendance — {programName}</h1>
-        <p className="text-xs text-[var(--color-ink-faint)] mt-1">Student attendance history during project reviews.</p>
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="font-display text-2xl font-bold text-[var(--color-ink)]">Student Attendance — {programName}</h1>
+          <p className="text-xs text-[var(--color-ink-faint)] mt-1">Individual student review attendance records and eligibility metrics.</p>
+        </div>
+
+        <button onClick={handleExport} className="px-4 py-2 rounded-xl text-xs font-semibold bg-[var(--color-verdant)] text-white hover:bg-[var(--color-verdant)]/90 transition-colors flex items-center gap-2 shadow-xs">
+          <Download size={14} /> Export Excel
+        </button>
       </div>
-      <div className="p-8 text-center text-xs text-[var(--color-ink-faint)] border border-dashed border-[var(--color-ink)]/20 rounded-xl">
-        Student attendance records for {programName}.
+
+      {/* Visual Analytics Graph Bar */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-white p-5 rounded-xl border border-[var(--color-ink)]/10 shadow-[var(--shadow-card)] space-y-2">
+          <span className="text-[11px] font-bold text-[var(--color-ink-faint)] uppercase tracking-wider">Total Students</span>
+          <p className="text-2xl font-display font-bold text-[var(--color-ink)]">{students.length}</p>
+        </div>
+        <div className="bg-white p-5 rounded-xl border border-[var(--color-ink)]/10 shadow-[var(--shadow-card)] space-y-2">
+          <span className="text-[11px] font-bold text-[var(--color-verdant)] uppercase tracking-wider">Eligible (&gt;=75%)</span>
+          <p className="text-2xl font-display font-bold text-[var(--color-verdant)]">{studentStats.filter((s) => s.ratePct >= 75).length}</p>
+        </div>
+        <div className="bg-white p-5 rounded-xl border border-[var(--color-ink)]/10 shadow-[var(--shadow-card)] space-y-2">
+          <span className="text-[11px] font-bold text-[var(--color-seal)] uppercase tracking-wider">Average Attendance Rate</span>
+          <div className="flex items-center gap-3">
+            <span className="text-2xl font-display font-bold text-[var(--color-seal)] font-data">{avgAttendance}%</span>
+            <div className="flex-1 h-2 bg-[var(--color-paper-dim)] rounded-full overflow-hidden">
+              <div className="h-full bg-[var(--color-seal)] transition-all duration-500" style={{ width: `${avgAttendance}%` }} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl border border-[var(--color-ink)]/10 shadow-[var(--shadow-card)] overflow-hidden">
+        <div className="p-4 border-b border-[var(--color-ink)]/10 bg-[var(--color-paper)]/50 flex items-center justify-between gap-4">
+          <span className="text-xs font-bold text-[var(--color-ink-soft)] uppercase tracking-wider shrink-0">Student Attendance List ({filteredStudents.length})</span>
+          <input
+            type="text"
+            placeholder="Search student by name or register number..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="px-3 py-1.5 rounded-lg border border-[var(--color-ink)]/15 text-xs max-w-xs w-full"
+          />
+        </div>
+
+        {filteredStudents.length === 0 ? (
+          <div className="p-12 text-center text-xs text-[var(--color-ink-faint)] font-medium">No student attendance data found.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-[var(--color-ink)]/10 bg-[var(--color-paper)]/30 font-semibold text-[var(--color-ink-soft)]">
+                  <th className="p-3.5 pl-6">Register No</th>
+                  <th className="p-3.5">Name</th>
+                  <th className="p-3.5">Email</th>
+                  <th className="p-3.5">Present / Total Sessions</th>
+                  <th className="p-3.5 pr-6 text-right">Attendance Rate</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--color-ink)]/5">
+                {filteredStudents.map((st) => (
+                  <tr key={st._id} className="hover:bg-[var(--color-paper-dim)]/50 transition-colors">
+                    <td className="p-3.5 pl-6 font-data font-medium text-[var(--color-ink)]">{st.regNo}</td>
+                    <td className="p-3.5 font-semibold text-[var(--color-ink)]">{st.name}</td>
+                    <td className="p-3.5 text-[var(--color-ink-faint)]">{st.email}</td>
+                    <td className="p-3.5 font-data font-bold text-[var(--color-ink)]">{st.presentSessions} / {st.totalSessions}</td>
+                    <td className="p-3.5 pr-6 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <span className={`font-data font-bold ${st.ratePct >= 75 ? 'text-[var(--color-verdant)]' : 'text-[var(--color-flag)]'}`}>{st.ratePct}%</span>
+                        <div className="w-16 h-2 bg-[var(--color-paper-dim)] rounded-full overflow-hidden">
+                          <div className={`h-full ${st.ratePct >= 75 ? 'bg-[var(--color-verdant)]' : 'bg-[var(--color-flag)]'}`} style={{ width: `${st.ratePct}%` }} />
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
+/* -------------------------------------------------------------------------- */
+/* TAB 10: SCHEDULES                                                          */
+/* -------------------------------------------------------------------------- */
 function SchedulesTab({ programName }: { programName: string }) {
+  const { data: slots, refetch } = useScheduledSlots(programName);
+  const generateMutation = useGenerateSchedules();
+  const clearMutation = useClearSchedules();
+  const deleteMutation = useDeleteScheduledSlot();
+
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
+  const [reviewType, setReviewType] = useState('review1');
+  const [periodLabel, setPeriodLabel] = useState('Odd Semester 2026');
+  const [durationMinutes, setDurationMinutes] = useState(30);
+
+  async function handleAutoGenerate() {
+    try {
+      const res = await generateMutation.mutateAsync({ reviewType, periodLabel, durationMinutes });
+      toast.success(`Generated review schedules for ${res.results?.length ?? 0} teams`);
+      setShowGenerateModal(false);
+      refetch();
+    } catch (e) {
+      toast.error(apiErrorMessage(e));
+    }
+  }
+
+  async function handleClearAll() {
+    if (!confirm(`Are you sure you want to clear ALL scheduled slots for ${programName}?`)) return;
+    try {
+      await clearMutation.mutateAsync();
+      toast.success('Cleared all scheduled slots');
+      refetch();
+    } catch (e) {
+      toast.error(apiErrorMessage(e));
+    }
+  }
+
+  async function handleDeleteSlot(id: string) {
+    try {
+      await deleteMutation.mutateAsync(id);
+      toast.success('Deleted scheduled slot');
+      refetch();
+    } catch (e) {
+      toast.error(apiErrorMessage(e));
+    }
+  }
+
+  const review1Count = slots?.filter((s) => s.reviewType === 'review1').length ?? 0;
+  const review2Count = slots?.filter((s) => s.reviewType === 'review2').length ?? 0;
+  const vivaCount = slots?.filter((s) => s.reviewType === 'viva').length ?? 0;
+
   return (
-    <div className="bg-white rounded-xl border border-[var(--color-ink)]/10 shadow-[var(--shadow-card)] p-8 space-y-6">
-      <div>
-        <h1 className="font-display text-2xl font-bold text-[var(--color-ink)]">Review Scheduling — {programName}</h1>
-        <p className="text-xs text-[var(--color-ink-faint)] mt-1">Programme-wise schedule generation across multiple review rounds & viva sessions.</p>
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="font-display text-2xl font-bold text-[var(--color-ink)]">Review Scheduling — {programName}</h1>
+          <p className="text-xs text-[var(--color-ink-faint)] mt-1">Programme-wise schedule generation across multiple review rounds & viva sessions.</p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowGenerateModal(true)} className="px-4 py-2 rounded-xl text-xs font-semibold bg-[var(--color-seal)] text-[var(--color-paper)] hover:bg-[var(--color-seal)]/90 transition-colors flex items-center gap-2 shadow-sm">
+            <Play size={14} /> Auto-Generate Schedule
+          </button>
+          <button onClick={handleClearAll} className="px-3 py-2 rounded-xl text-xs font-semibold bg-[var(--color-flag-soft)] text-[var(--color-flag)] hover:bg-[var(--color-flag)] hover:text-white transition-colors flex items-center gap-1">
+            <Trash2 size={14} /> Clear Schedules
+          </button>
+        </div>
       </div>
-      <div className="p-8 text-center text-xs text-[var(--color-ink-faint)] border border-dashed border-[var(--color-ink)]/20 rounded-xl">
-        Review schedules and slot generation for {programName}.
+
+      {/* Visual Slot Distribution Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-white p-5 rounded-xl border border-[var(--color-ink)]/10 shadow-[var(--shadow-card)] space-y-2">
+          <span className="text-[11px] font-bold text-[var(--color-ink-faint)] uppercase tracking-wider">Total Scheduled Slots</span>
+          <p className="text-2xl font-display font-bold text-[var(--color-ink)]">{slots?.length ?? 0}</p>
+        </div>
+        <div className="bg-white p-5 rounded-xl border border-[var(--color-ink)]/10 shadow-[var(--shadow-card)] space-y-2">
+          <span className="text-[11px] font-bold text-[var(--color-seal)] uppercase tracking-wider">Review 1 Slots</span>
+          <p className="text-2xl font-display font-bold text-[var(--color-seal)]">{review1Count}</p>
+        </div>
+        <div className="bg-white p-5 rounded-xl border border-[var(--color-ink)]/10 shadow-[var(--shadow-card)] space-y-2">
+          <span className="text-[11px] font-bold text-[var(--color-verdant)] uppercase tracking-wider">Review 2 Slots</span>
+          <p className="text-2xl font-display font-bold text-[var(--color-verdant)]">{review2Count}</p>
+        </div>
+        <div className="bg-white p-5 rounded-xl border border-[var(--color-ink)]/10 shadow-[var(--shadow-card)] space-y-2">
+          <span className="text-[11px] font-bold text-[var(--color-flag)] uppercase tracking-wider">Viva Slots</span>
+          <p className="text-2xl font-display font-bold text-[var(--color-flag)]">{vivaCount}</p>
+        </div>
       </div>
+
+      <div className="bg-white rounded-xl border border-[var(--color-ink)]/10 shadow-[var(--shadow-card)] overflow-hidden">
+        <div className="p-4 border-b border-[var(--color-ink)]/10 bg-[var(--color-paper)]/50 flex items-center justify-between">
+          <span className="text-xs font-bold text-[var(--color-ink-soft)] uppercase tracking-wider">Scheduled Review Slots ({slots?.length ?? 0})</span>
+        </div>
+
+        {slots?.length === 0 ? (
+          <div className="p-12 text-center text-xs text-[var(--color-ink-faint)] font-medium">No review slots scheduled yet for {programName}. Click "Auto-Generate Schedule" above.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-[var(--color-ink)]/10 bg-[var(--color-paper)]/30 font-semibold text-[var(--color-ink-soft)]">
+                  <th className="p-3.5 pl-6">Slot Time</th>
+                  <th className="p-3.5">Review Type</th>
+                  <th className="p-3.5">Team Name</th>
+                  <th className="p-3.5">Assigned Panel / Faculty</th>
+                  <th className="p-3.5 pr-6 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--color-ink)]/5">
+                {slots?.map((s) => (
+                  <tr key={s._id} className="hover:bg-[var(--color-paper-dim)]/50 transition-colors">
+                    <td className="p-3.5 pl-6 font-data text-[var(--color-ink)]">
+                      <div className="font-bold">{new Date(s.startTime).toLocaleDateString()}</div>
+                      <div className="text-[11px] text-[var(--color-ink-faint)]">
+                        {new Date(s.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date(s.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    </td>
+                    <td className="p-3.5 uppercase font-bold text-[10px] text-[var(--color-seal)] tracking-wider">{s.reviewType}</td>
+                    <td className="p-3.5 font-display font-bold text-[var(--color-ink)]">{s.teamId?.name ?? 'Team'}</td>
+                    <td className="p-3.5 font-medium text-[var(--color-ink-soft)]">
+                      {s.facultyIds?.map((f) => f.name).join(', ') || 'Assigned Panel'}
+                    </td>
+                    <td className="p-3.5 pr-6 text-right">
+                      <button onClick={() => handleDeleteSlot(s._id)} className="p-1.5 text-[var(--color-flag)] hover:bg-[var(--color-flag-soft)] rounded transition-colors">
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {showGenerateModal && (
+        <div className="fixed inset-0 bg-[var(--color-ink)]/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 space-y-4 shadow-[var(--shadow-raised)] border border-[var(--color-ink)]/10">
+            <h3 className="font-display text-lg font-bold text-[var(--color-ink)]">Auto-Generate Review Schedule</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-[var(--color-ink-soft)] mb-1">Review Type</label>
+                <select value={reviewType} onChange={(e) => setReviewType(e.target.value)} className="w-full px-3 py-2 border border-[var(--color-ink)]/15 rounded-lg text-xs">
+                  <option value="review1">Review 1</option>
+                  <option value="review2">Review 2</option>
+                  <option value="review3">Review 3</option>
+                  <option value="viva">Viva Session</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-[var(--color-ink-soft)] mb-1">Period Label</label>
+                <input type="text" value={periodLabel} onChange={(e) => setPeriodLabel(e.target.value)} className="w-full px-3 py-2 border border-[var(--color-ink)]/15 rounded-lg text-xs" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-[var(--color-ink-soft)] mb-1">Duration per Team (Minutes)</label>
+                <input type="number" min={10} max={120} value={durationMinutes} onChange={(e) => setDurationMinutes(Number(e.target.value))} className="w-full px-3 py-2 border border-[var(--color-ink)]/15 rounded-lg text-xs" />
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button onClick={() => setShowGenerateModal(false)} className="px-4 py-2 rounded-lg text-xs font-semibold bg-[var(--color-paper-dim)] text-[var(--color-ink)]">Cancel</button>
+              <button onClick={handleAutoGenerate} className="px-4 py-2 rounded-lg text-xs font-semibold bg-[var(--color-seal)] text-[var(--color-paper)] flex items-center gap-1.5">
+                <Play size={13} /> Generate
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

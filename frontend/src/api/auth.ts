@@ -18,12 +18,25 @@ export async function getRolesRequest(identityToken: string) {
   return res.data as { name: string; options: RoleOption[] };
 }
 
+export async function getAvailableRoles() {
+  const res = await api.get('/auth/roles');
+  return res.data as { name: string; roles: RoleOption[] };
+}
+
 export async function selectRoleRequest(identityToken: string, role: ScopedRole, programId: string | null) {
   const res = await api.post(
     '/auth/select-role',
     { role, programId },
     { headers: { Authorization: `Bearer ${identityToken}` } }
   );
+  return res.data as {
+    accessToken: string;
+    profile: { userId: string; name: string; role: ScopedRole; programId: string | null };
+  };
+}
+
+export async function selectRole(role: ScopedRole, programId?: string | null) {
+  const res = await api.post('/auth/select-role', { role, programId });
   return res.data as {
     accessToken: string;
     profile: { userId: string; name: string; role: ScopedRole; programId: string | null };

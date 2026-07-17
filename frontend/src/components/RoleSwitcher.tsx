@@ -1,161 +1,67 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ChevronDown, RefreshCw } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
 import { useAuthStore } from '@/store/authStore';
-import { api, apiErrorMessage } from '@/api/client';
+import { selectRole, getAvailableRoles } from '@/api/auth';
+import { RoleOption } from '@/types';
 import { toast } from '@/components/ui/Toast';
+import { apiErrorMessage } from '@/api/client';
+import { UserCheck, ChevronDown } from 'lucide-react';
 
-interface RoleOption {
-  role: string;
-  programId: string | null;
-  programLabel: string;
-}
-
-const ROLE_LABELS: Record<string, string> = {
-  admin: 'Admin',
-  coordinator: 'Coordinator',
-  guide: 'Guide',
-  panel: 'Panel Member',
-  assistant: 'Assistant',
-  student: 'Student',
-};
-
-/**
- * RoleSwitcher — lets multi-role faculty switch between their role×program
- * contexts at runtime without a full logout.
- */
 export function RoleSwitcher() {
   const profile = useAuthStore((s) => s.profile);
-  const setProfile = useAuthStore((s) => s.setProfile);
-  const setAccessToken = useAuthStore((s) => s.setAccessToken);
-  const identityToken = useAuthStore((s) => s.identityToken);
-
-  const [open, setOpen] = useState(false);
+  const setSession = useAuthStore((s) => s.setSession);
   const [options, setOptions] = useState<RoleOption[]>([]);
-  const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
 
-  if (!profile || profile.role === 'student') return null; // students can't switch roles
+  useEffect(() => {
+    getAvailableRoles()
+      .then((res) => setOptions(res.roles))
+      .catch(() => {});
+  }, []);
 
-  async function loadOptions() {
-    if (!identityToken) return;
-    setLoading(true);
+  if (!options || options.length <= 1) return null;
+
+  async function handleSwitch(role: RoleOption['role'], programId?: string) {
     try {
-      const res = await api.get('/auth/roles', {
-        headers: { Authorization: `Bearer ${identityToken}` },
-      });
-      setOptions(res.data.options ?? []);
-    } catch (err) {
-      // If identity token expired, fall back to just showing current role
-      setOptions([]);
-    } finally {
-      setLoading(false);
+      const res = await selectRole(role, programId);
+      setSession(res.accessToken, res.profile);
+      toast.success(`Switched role to ${res.profile.role.toUpperCase()}`);
+      setOpen(false);
+      window.location.reload();
+    } catch (e) {
+      toast.error(apiErrorMessage(e));
     }
   }
-
-  async function handleSelect(opt: RoleOption) {
-    setOpen(false);
-    if (!identityToken) {
-      toast.error('Session expired. Please log in again.');
-      return;
-    }
-    try {
-      const res = await api.post(
-        '/auth/select-role',
-        { role: opt.role, programId: opt.programId },
-        { headers: { Authorization: `Bearer ${identityToken}` } }
-      );
-      setAccessToken(res.data.accessToken);
-      setProfile(res.data.profile);
-
-      // Navigate to the appropriate dashboard
-      const roleMap: Record<string, string> = {
-        admin: '/admin',
-        coordinator: '/coordinator',
-        guide: '/guide',
-        panel: '/panel',
-        assistant: '/assistant/faculty',
-      };
-      navigate(roleMap[opt.role] ?? '/');
-    } catch (err) {
-      toast.error(apiErrorMessage(err));
-    }
-  }
-
-  const currentLabel = profile
-    ? `${ROLE_LABELS[profile.role] ?? profile.role}`
-    : '';
 
   return (
-    <div className="relative">
+    <div className="relative inline-block text-left">
       <button
-        id="role-switcher-btn"
-        onClick={() => {
-          if (!open) loadOptions();
-          setOpen((v) => !v);
-        }}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium
-                   bg-[var(--color-ink)]/6 hover:bg-[var(--color-ink)]/10
-                   text-[var(--color-ink)] transition-colors"
-        title="Switch role"
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--color-seal-dim)] text-[var(--color-seal)] border border-[var(--color-seal)]/30 text-xs font-semibold hover:bg-[var(--color-seal)] hover:text-white transition-all shadow-xs"
       >
-        <RefreshCw size={13} className="text-[var(--color-seal)]" />
-        <span>{currentLabel}</span>
-        <ChevronDown size={13} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+        <UserCheck size={14} />
+        <span>Role: {profile?.role.toUpperCase()}</span>
+        <ChevronDown size={12} />
       </button>
 
       {open && (
-        <>
-          {/* Backdrop */}
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          {/* Dropdown */}
-          <div className="absolute right-0 top-full mt-1.5 z-50 w-60 rounded-xl border border-[var(--color-ink)]/8
-                          bg-white shadow-lg shadow-[var(--color-ink)]/6 overflow-hidden">
-            <div className="px-3 py-2 border-b border-[var(--color-ink)]/8">
-              <p className="text-xs font-medium text-[var(--color-ink-faint)] uppercase tracking-wide">Switch to</p>
-            </div>
-            {loading ? (
-              <div className="p-4 flex justify-center">
-                <div className="h-5 w-5 rounded-full border-2 border-[var(--color-ink)]/15 border-t-[var(--color-seal)] animate-spin" />
-              </div>
-            ) : options.length === 0 ? (
-              <div className="p-4 text-sm text-[var(--color-ink-faint)] text-center">
-                No other roles available
-              </div>
-            ) : (
-              <div className="py-1 max-h-64 overflow-y-auto">
-                {options.map((opt, i) => {
-                  const isCurrentRole = opt.role === profile?.role && opt.programId === profile?.programId;
-                  return (
-                    <button
-                      key={i}
-                      onClick={() => handleSelect(opt)}
-                      disabled={isCurrentRole}
-                      className={`w-full text-left px-3 py-2.5 flex items-center justify-between gap-2
-                                  text-sm transition-colors
-                                  ${isCurrentRole
-                                    ? 'bg-[var(--color-seal)]/5 text-[var(--color-seal)] cursor-default'
-                                    : 'hover:bg-[var(--color-ink)]/4 text-[var(--color-ink)]'
-                                  }`}
-                    >
-                      <span>
-                        <span className="font-medium">{ROLE_LABELS[opt.role] ?? opt.role}</span>
-                        {opt.programLabel && opt.programLabel !== 'All Programs' && (
-                          <span className="text-xs text-[var(--color-ink-faint)] ml-1.5">({opt.programLabel})</span>
-                        )}
-                      </span>
-                      {isCurrentRole && (
-                        <span className="text-xs bg-[var(--color-seal)]/15 text-[var(--color-seal)] px-1.5 py-0.5 rounded">
-                          Current
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+        <div className="absolute right-0 mt-2 w-48 rounded-xl bg-white shadow-[var(--shadow-raised)] border border-[var(--color-ink)]/10 z-50 p-1.5 space-y-1">
+          <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-[var(--color-ink-faint)]">
+            Switch Active Context
           </div>
-        </>
+          {options.map((opt, i) => (
+            <button
+              key={`${opt.role}-${opt.programId || i}`}
+              onClick={() => handleSwitch(opt.role, opt.programId)}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                profile?.role === opt.role && profile?.programId === opt.programId
+                  ? 'bg-[var(--color-seal)] text-white font-bold'
+                  : 'text-[var(--color-ink)] hover:bg-[var(--color-paper-dim)]'
+              }`}
+            >
+              <span>{opt.label}</span>
+            </button>
+          ))}
+        </div>
       )}
     </div>
   );
