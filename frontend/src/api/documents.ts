@@ -8,7 +8,9 @@ export interface LetterTemplate {
 
 export interface SignatureItem {
   _id: string;
-  label: string;
+  label?: string;
+  role?: string;
+  filename?: string;
   imageBase64: string;
   createdAt: string;
 }
@@ -36,6 +38,23 @@ export function usePreviewLetter(type: string, teamId: string, reviewDate?: stri
   });
 }
 
+export async function downloadLetterPDF(type: string, teamId: string, reviewDate?: string, teamName?: string) {
+  const res = await api.get(`/documents/generate/${type}`, {
+    params: { teamId, reviewDate },
+    responseType: 'blob',
+  });
+
+  const blob = new Blob([res.data], { type: 'application/pdf' });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${type}_${(teamName || 'letter').replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  window.URL.revokeObjectURL(url);
+}
+
 export function useSignatures() {
   return useQuery({
     queryKey: ['signatures'],
@@ -49,8 +68,13 @@ export function useSignatures() {
 export function useCreateSignature() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: { label: string; imageBase64: string }) => {
-      const res = await api.post<{ signature: SignatureItem }>('/signatures', data);
+    mutationFn: async (data: { label: string; imageBase64: string; filename?: string }) => {
+      const res = await api.post<{ signature: SignatureItem }>('/signatures', {
+        label: data.label,
+        role: data.label,
+        filename: data.filename || 'signature.png',
+        imageBase64: data.imageBase64,
+      });
       return res.data;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['signatures'] }),

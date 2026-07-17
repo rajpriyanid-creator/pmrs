@@ -54,6 +54,7 @@ import {
   useSignatures,
   useCreateSignature,
   useDeleteSignature,
+  downloadLetterPDF,
 } from '@/api/documents';
 import { useReports, useApproveReport, useRejectReport } from '@/api/reports';
 import { useProgramAttendance, downloadAttendance } from '@/api/attendance';
@@ -798,14 +799,17 @@ function OfficialLettersTab({ programId, programName }: { programId: string; pro
   const { data: teams } = useAllocationTable(programId);
 
   const [sigLabel, setSigLabel] = useState('');
+  const [sigFilename, setSigFilename] = useState('');
   const [sigBase64, setSigBase64] = useState('');
+  const [downloading, setDownloading] = useState(false);
 
   async function handleAddSignature() {
     if (!sigLabel || !sigBase64) return toast.error('Signature label and image file are required');
     try {
-      await createSigMutation.mutateAsync({ label: sigLabel, imageBase64: sigBase64 });
+      await createSigMutation.mutateAsync({ label: sigLabel, imageBase64: sigBase64, filename: sigFilename });
       toast.success('Signature uploaded');
       setSigLabel('');
+      setSigFilename('');
       setSigBase64('');
       refetchSigs();
     } catch (e) {
@@ -816,6 +820,7 @@ function OfficialLettersTab({ programId, programName }: { programId: string; pro
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    setSigFilename(file.name);
     const reader = new FileReader();
     reader.onload = () => setSigBase64(reader.result as string);
     reader.readAsDataURL(file);
@@ -831,9 +836,18 @@ function OfficialLettersTab({ programId, programName }: { programId: string; pro
     }
   }
 
-  function handleDownloadLetter() {
-    if (!teamId) return toast.error('Select a team to generate letter');
-    window.open(`/api/documents/generate/${selectedTemplate}?teamId=${teamId}&reviewDate=${encodeURIComponent(reviewDate)}`, '_blank');
+  async function handleDownloadLetter() {
+    if (!teamId) return toast.error('Select a target team to generate letter');
+    try {
+      setDownloading(true);
+      const selectedTeamObj = teams?.find((t) => t.teamId === teamId);
+      await downloadLetterPDF(selectedTemplate, teamId, reviewDate, selectedTeamObj?.teamName);
+      toast.success('Official PDF letter generated & downloaded');
+    } catch (e) {
+      toast.error(apiErrorMessage(e));
+    } finally {
+      setDownloading(false);
+    }
   }
 
   return (
@@ -880,8 +894,12 @@ function OfficialLettersTab({ programId, programName }: { programId: string; pro
             </div>
           )}
 
-          <button onClick={handleDownloadLetter} className="w-full py-2.5 rounded-xl text-xs font-semibold bg-[var(--color-seal)] text-[var(--color-paper)] shadow-xs flex items-center justify-center gap-2">
-            <Download size={14} /> Download Generated Letter
+          <button
+            onClick={handleDownloadLetter}
+            disabled={downloading}
+            className="w-full py-2.5 rounded-xl text-xs font-semibold bg-[var(--color-seal)] text-[var(--color-paper)] shadow-xs flex items-center justify-center gap-2 hover:opacity-95 disabled:opacity-50 transition-opacity"
+          >
+            <Download size={14} /> {downloading ? 'Generating Official PDF...' : 'Download Generated PDF Letter'}
           </button>
         </div>
 
@@ -891,19 +909,19 @@ function OfficialLettersTab({ programId, programName }: { programId: string; pro
           <div className="space-y-3 border-b border-[var(--color-ink)]/10 pb-4">
             <input type="text" placeholder="Signature Label (e.g. HOD Signature)" value={sigLabel} onChange={(e) => setSigLabel(e.target.value)} className="w-full px-3 py-2 rounded-lg border border-[var(--color-ink)]/15 text-xs" />
             <input type="file" accept="image/*" onChange={handleFileChange} className="text-xs text-[var(--color-ink-faint)]" />
-            <button onClick={handleAddSignature} className="w-full py-2 rounded-lg text-xs font-semibold bg-[var(--color-ink)] text-[var(--color-paper)]">
+            <button onClick={handleAddSignature} className="w-full py-2 rounded-lg text-xs font-semibold bg-[var(--color-ink)] text-[var(--color-paper)] hover:bg-[var(--color-ink)]/90 transition-colors">
               Upload Signature
             </button>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-2 max-h-60 overflow-y-auto">
             {signatures?.map((sig) => (
               <div key={sig._id} className="p-3 rounded-lg border border-[var(--color-ink)]/10 bg-[var(--color-paper)]/50 flex items-center justify-between">
                 <div>
-                  <p className="font-semibold text-xs text-[var(--color-ink)]">{sig.label}</p>
-                  <img src={sig.imageBase64} alt={sig.label} className="h-8 object-contain mt-1" />
+                  <p className="font-semibold text-xs text-[var(--color-ink)]">{sig.label || sig.role || 'Signature'}</p>
+                  {sig.imageBase64 && <img src={sig.imageBase64} alt={sig.label || sig.role} className="h-8 object-contain mt-1 rounded bg-white p-0.5 border border-[var(--color-ink)]/10" />}
                 </div>
-                <button onClick={() => handleDeleteSig(sig._id)} className="p-1.5 text-[var(--color-flag)] hover:bg-[var(--color-flag-soft)] rounded">
+                <button onClick={() => handleDeleteSig(sig._id)} className="p-1.5 text-[var(--color-flag)] hover:bg-[var(--color-flag-soft)] rounded transition-colors">
                   <Trash2 size={14} />
                 </button>
               </div>

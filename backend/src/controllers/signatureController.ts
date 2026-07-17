@@ -24,22 +24,24 @@ export const getSignature = asyncHandler(async (req: Request, res: Response) => 
 
 /** POST /signatures — upload a new signature image. */
 export const createSignature = asyncHandler(async (req: Request, res: Response) => {
-  const { imageBase64, filename, role: sigRole } = req.body as {
+  const { imageBase64, filename, role: sigRole, label } = req.body as {
     imageBase64: string;
-    filename: string;
-    role: string;
+    filename?: string;
+    role?: string;
+    label?: string;
   };
-  if (!imageBase64 || !filename) throw ApiError.badRequest('imageBase64 and filename are required');
-  if (imageBase64.length > 2 * 1024 * 1024) throw ApiError.badRequest('Signature image too large (max ~1.5 MB base64)');
+  if (!imageBase64) throw ApiError.badRequest('imageBase64 is required');
+  if (imageBase64.length > 3 * 1024 * 1024) throw ApiError.badRequest('Signature image too large (max ~2 MB base64)');
 
   const sig = await Signature.create({
     ownerId: req.auth!.userId,
     ownerModel: 'Faculty',
-    role: sigRole || req.auth!.role,
+    role: label || sigRole || req.auth!.role || 'Signature',
+    label: label || sigRole || 'Signature',
     imageBase64,
-    filename,
+    filename: filename || 'signature.png',
   });
-  res.status(201).json({ signature: { ...sig.toObject(), imageBase64: undefined } });
+  res.status(201).json({ signature: sig });
 });
 
 /** PATCH /signatures/:id — update signature image or filename. */
