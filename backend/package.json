@@ -20,6 +20,16 @@
   },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/compression": "^1.7.5",
+    "@types/cookie-parser": "^1.4.7",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/hpp": "^0.2.6",
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/morgan": "^1.9.9",
+    "@types/multer": "^2.0.0",
+    "@types/node": "^20.14.2",
     "@types/nodemailer": "^8.0.1",
     "bcryptjs": "^2.4.3",
     "bullmq": "^5.7.15",
@@ -40,21 +50,11 @@
     "multer": "^2.2.0",
     "nodemailer": "^9.0.3",
     "socket.io": "^4.7.5",
+    "typescript": "^5.4.5",
     "winston": "^3.13.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@types/bcryptjs": "^2.4.6",
-    "@types/compression": "^1.7.5",
-    "@types/cookie-parser": "^1.4.7",
-    "@types/cors": "^2.8.17",
-    "@types/express": "^4.17.21",
-    "@types/hpp": "^0.2.6",
-    "@types/jsonwebtoken": "^9.0.6",
-    "@types/morgan": "^1.9.9",
-    "@types/multer": "^2.0.0",
-    "@types/node": "^20.14.2",
-    "tsx": "^4.15.4",
-    "typescript": "^5.4.5"
+    "tsx": "^4.15.4"
   }
 }
