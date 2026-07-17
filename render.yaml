@@ -16,7 +16,7 @@ services:
       - key: PORT
         value: 10000
       - key: MONGO_URI
-        value: "<YOUR_MONGODB_ATLAS_CONNECTION_STRING>"  # replace with actual URI
+        value: "mongodb+srv://hellorajpriyan_db_user:rI0BW4H1JwCna3Zb@dept.cgammqj.mongodb.net/?appName=dept"
       - key: JWT_ACCESS_SECRET
         generateValue: true
       - key: JWT_REFRESH_SECRET
