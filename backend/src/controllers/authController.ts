@@ -27,9 +27,9 @@ function refreshCookieOptions() {
   return {
     httpOnly: true,
     secure: env.COOKIE_SECURE,
-    sameSite: 'strict' as const,
+    sameSite: env.COOKIE_SECURE ? 'none' as const : 'lax' as const,
     maxAge: env.REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000,
-    path: '/api/auth',
+    path: '/',
   };
 }
 

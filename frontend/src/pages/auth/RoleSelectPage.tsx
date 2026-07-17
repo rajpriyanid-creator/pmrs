@@ -45,9 +45,24 @@ export function RoleSelectPage() {
       return;
     }
     getRolesRequest(identityToken)
-      .then((res) => {
-        setOptions(res.options);
+      .then(async (res) => {
         setRoleOptions(res.options);
+
+        // Auto-select if there is exactly one role option (e.g. admin-only)
+        if (res.options.length === 1) {
+          const only = res.options[0];
+          try {
+            const selectRes = await selectRoleRequest(identityToken, only.role, only.programId);
+            setSession(selectRes.accessToken, selectRes.profile);
+            navigate(DEFAULT_ROUTE[only.role], { replace: true });
+          } catch (err) {
+            toast.error(apiErrorMessage(err));
+            setOptions(res.options); // fallback: show the single option
+          }
+          return;
+        }
+
+        setOptions(res.options);
       })
       .catch((err) => {
         toast.error(apiErrorMessage(err));
