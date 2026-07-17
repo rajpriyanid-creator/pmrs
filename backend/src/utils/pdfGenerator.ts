@@ -114,13 +114,18 @@ export function generateLetterPDF(options: PDFLetterOptions): Promise<Buffer> {
       const sigY = currentY;
       doc.fontSize(10).font('Helvetica-Bold').text('Yours Sincerely,', 380, sigY, { align: 'right' });
 
-      if (options.signatureBase64 && options.signatureBase64.startsWith('data:image')) {
+      if (options.signatureBase64 && typeof options.signatureBase64 === 'string') {
         try {
-          const base64Data = options.signatureBase64.replace(/^data:image\/\w+;base64,/, '');
-          const imgBuffer = Buffer.from(base64Data, 'base64');
-          doc.image(imgBuffer, 380, sigY + 15, { fit: [120, 45], align: 'right' });
+          let base64Data = options.signatureBase64;
+          if (base64Data.includes(',')) {
+            base64Data = base64Data.split(',')[1];
+          }
+          const imgBuffer = Buffer.from(base64Data.trim(), 'base64');
+          if (imgBuffer && imgBuffer.length > 0) {
+            doc.image(imgBuffer, 380, sigY + 15, { fit: [120, 45], align: 'right' });
+          }
         } catch {
-          // Fallback if image parsing fails
+          // Fallback if image rendering fails (e.g. invalid format)
         }
       }
 

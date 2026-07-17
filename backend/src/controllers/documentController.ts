@@ -126,6 +126,8 @@ export const listTemplates = asyncHandler(async (_req: Request, res: Response) =
   res.json({ templates });
 });
 
+import { Types } from 'mongoose';
+
 /** GET/POST /documents/generate/:type — generate a letter for a team as PDF. */
 export const generateLetter = asyncHandler(async (req: Request, res: Response) => {
   const { type } = req.params;
@@ -134,7 +136,9 @@ export const generateLetter = asyncHandler(async (req: Request, res: Response) =
 
   const teamId = (req.query.teamId || req.body?.teamId) as string;
   const reviewDate = (req.query.reviewDate || req.body?.reviewDate) as string;
-  if (!teamId) throw ApiError.badRequest('teamId is required');
+  if (!teamId || !Types.ObjectId.isValid(teamId)) {
+    throw ApiError.badRequest('A valid teamId is required');
+  }
 
   const team = await Team.findById(teamId)
     .populate('guideId', 'name')
@@ -144,15 +148,19 @@ export const generateLetter = asyncHandler(async (req: Request, res: Response) =
   if (!team) throw ApiError.notFound('Team not found');
 
   // Fetch coordinator for this team via ReviewPanel
-  const panel = await ReviewPanel.findOne({ teamIds: teamId }).populate('coordinatorId', 'name').lean() as any;
+  const panel = await ReviewPanel.findOne({ teamIds: new Types.ObjectId(teamId) })
+    .populate('coordinatorId', 'name')
+    .lean() as any;
 
   // Fetch viva panel external members if applicable
-  const vivaPanel = await VivaPanel.findOne({ teamIds: teamId }).lean() as any;
+  const vivaPanel = await VivaPanel.findOne({ teamIds: new Types.ObjectId(teamId) }).lean() as any;
 
   // Fetch signature for coordinator or admin
-  const signature = await Signature.findOne({
-    $or: [{ ownerId: req.auth?.userId }, { role: { $regex: /coordinator|hod/i } }],
-  }).select('imageBase64').lean();
+  const sigOr: any[] = [{ role: { $regex: /coordinator|hod/i } }];
+  if (req.auth?.userId && Types.ObjectId.isValid(req.auth.userId)) {
+    sigOr.push({ ownerId: new Types.ObjectId(req.auth.userId) });
+  }
+  const signature = await Signature.findOne({ $or: sigOr }).select('imageBase64').lean();
 
   const labels: Record<string, string> = {
     viva_letter: 'Viva Examination Invitation Letter',
@@ -160,6 +168,13 @@ export const generateLetter = asyncHandler(async (req: Request, res: Response) =
     external_examiner_letter: 'External Examiner Remuneration & Claim Letter',
     chairman_letter: 'Viva Panel Chairman Appointment Notice',
   };
+
+  const formattedStudents = (team.students || []).map((s: any) => {
+    if (typeof s === 'object' && s !== null) {
+      return { name: s.name || 'Student', rollNo: s.rollNo || '' };
+    }
+    return { name: String(s), rollNo: '' };
+  });
 
   const pdfBuffer = await generateLetterPDF({
     type,
@@ -169,7 +184,7 @@ export const generateLetter = asyncHandler(async (req: Request, res: Response) =
     programName: team.program?.name || 'Academic Programme',
     guideName: team.guideId?.name ?? 'N/A',
     coordinatorName: panel?.coordinatorId?.name ?? 'Dr. Ramesh Gurunath',
-    students: team.students ?? [],
+    students: formattedStudents,
     externalName: vivaPanel?.externalMembers?.[0]?.name ?? 'Dr. R. Ramanujam',
     externalAffiliation: vivaPanel?.externalMembers?.[0]?.affiliation ?? 'IIT Madras',
     externalEmail: vivaPanel?.externalMembers?.[0]?.email ?? 'ramanujam@iitm.ac.in',
