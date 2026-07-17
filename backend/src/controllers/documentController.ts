@@ -158,7 +158,10 @@ export const generateLetter = asyncHandler(async (req: Request, res: Response) =
     const vivaPanel = await VivaPanel.findOne({ teamIds: new Types.ObjectId(teamId) }).lean() as any;
 
     // Fetch signature for coordinator or admin
-    const sigOr: any[] = [{ role: { $regex: /coordinator|hod/i } }];
+    const sigOr: any[] = [
+      { role: new RegExp('coordinator|hod', 'i') },
+      { label: new RegExp('coordinator|hod', 'i') },
+    ];
     if (req.auth?.userId && Types.ObjectId.isValid(req.auth.userId)) {
       sigOr.push({ ownerId: new Types.ObjectId(req.auth.userId) });
     }
