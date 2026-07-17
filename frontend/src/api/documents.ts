@@ -39,20 +39,35 @@ export function usePreviewLetter(type: string, teamId: string, reviewDate?: stri
 }
 
 export async function downloadLetterPDF(type: string, teamId: string, reviewDate?: string, teamName?: string) {
-  const res = await api.get(`/documents/generate/${type}`, {
-    params: { teamId, reviewDate },
-    responseType: 'blob',
-  });
+  try {
+    const res = await api.get(`/documents/generate/${type}`, {
+      params: { teamId, reviewDate },
+      responseType: 'blob',
+    });
 
-  const blob = new Blob([res.data], { type: 'application/pdf' });
-  const url = window.URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${type}_${(teamName || 'letter').replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  window.URL.revokeObjectURL(url);
+    const blob = new Blob([res.data], { type: 'application/pdf' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${type}_${(teamName || 'letter').replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  } catch (err: any) {
+    if (err?.response?.data instanceof Blob) {
+      try {
+        const text = await err.response.data.text();
+        const json = JSON.parse(text);
+        if (json?.error?.message) {
+          throw new Error(json.error.message);
+        }
+      } catch (parseErr: any) {
+        if (parseErr.message && !parseErr.message.includes('JSON')) throw parseErr;
+      }
+    }
+    throw err;
+  }
 }
 
 export function useSignatures() {
