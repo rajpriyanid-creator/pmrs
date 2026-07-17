@@ -47,12 +47,49 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
   if (faculty) {
     const ok = await comparePassword(password, faculty.passwordHash);
     if (!ok) throw ApiError.unauthorized('Invalid username or password');
-    const identityToken = signIdentityToken(faculty._id.toString(), 'Faculty');
+
+    // Auto-determine the faculty member's primary role (no role-selection step)
+    let role: ScopedRole;
+    let programId: string | null = null;
+
+    if (faculty.isAdmin) {
+      role = 'admin';
+    } else if (faculty.isAssistant) {
+      role = 'assistant';
+    } else {
+      // Check coordinator assignment first
+      const coordPanel = await ReviewPanel.findOne({ coordinatorId: faculty._id }).select('program').lean();
+      if (coordPanel) {
+        role = 'coordinator';
+        programId = coordPanel.program.toString();
+      } else {
+        // Check panel member assignment
+        const memberPanel = await ReviewPanel.findOne({ memberIds: faculty._id }).select('program').lean();
+        if (memberPanel) {
+          role = 'panel';
+          programId = memberPanel.program.toString();
+        } else {
+          // Default to guide with the first available program
+          const firstProgram = await Program.findOne().lean();
+          role = 'guide';
+          programId = firstProgram?._id.toString() ?? null;
+        }
+      }
+    }
+
+    const accessToken = signAccessToken({
+      userId: faculty._id.toString(),
+      userModel: 'Faculty',
+      role,
+      programId,
+      tokenVersion: faculty.refreshTokenVersion,
+    });
+    await issueSession(res, faculty._id.toString(), 'Faculty');
     return res.json({
-      needsRoleSelection: true,
-      identityToken,
-      name: faculty.name,
+      needsRoleSelection: false,
+      accessToken,
       mustChangePassword: faculty.mustChangePassword,
+      profile: { userId: faculty._id.toString(), name: faculty.name, role, programId },
     });
   }
 

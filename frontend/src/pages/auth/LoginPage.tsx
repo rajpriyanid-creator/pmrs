@@ -19,26 +19,33 @@ export function LoginPage() {
   const setSession = useAuthStore((s) => s.setSession);
   const clear = useAuthStore((s) => s.clear);
 
+  const DEFAULT_ROUTE: Record<string, string> = {
+    admin: '/admin',
+    coordinator: '/coordinator',
+    guide: '/guide',
+    panel: '/panel',
+    assistant: '/assistant/faculty',
+    student: '/student',
+  };
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setLoading(true);
     try {
+      clear(); // Clear any stale session data
       const result = await loginRequest(username, password);
       if (result.needsRoleSelection) {
-        clear();
+        // Legacy fallback — should no longer happen with the new backend
         setIdentity(result.identityToken, result.name);
-        if (result.mustChangePassword) {
-          navigate('/change-password');
-        } else {
-          navigate('/select-role');
-        }
+        navigate('/select-role');
       } else {
         setSession(result.accessToken, result.profile);
         if (result.mustChangePassword) {
           navigate('/change-password');
         } else {
-          navigate('/student');
+          const route = DEFAULT_ROUTE[result.profile.role] || '/admin';
+          navigate(route);
         }
       }
     } catch (err) {
