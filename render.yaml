@@ -16,7 +16,7 @@ services:
       - key: PORT
         value: 10000
       - key: MONGO_URI
-        sync: false # Set your MongoDB Atlas Connection String in Render Dashboard Environment
+        value: "<YOUR_MONGODB_ATLAS_CONNECTION_STRING>"  # replace with actual URI
       - key: JWT_ACCESS_SECRET
         generateValue: true
       - key: JWT_REFRESH_SECRET
@@ -26,7 +26,7 @@ services:
       - key: REFRESH_TOKEN_TTL_DAYS
         value: "7"
       - key: CORS_ORIGIN
-        value: https://prms-frontend.onrender.com
+        value: https://prms-frontend-3zgc.onrender.com
       - key: COOKIE_SECURE
         value: "true"
 
@@ -43,4 +43,4 @@ services:
         destination: /index.html
     envVars:
       - key: VITE_API_URL
-        value: https://prms-backend.onrender.com/api
+        value: https://prms-backend-frd7.onrender.com/api
